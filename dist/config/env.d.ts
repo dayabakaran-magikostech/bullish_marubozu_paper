@@ -1,0 +1,12 @@
+export declare const ENV: {
+    readonly port: string;
+    readonly liveBotDbUrl: string;
+    readonly instrumentsSheetName: string;
+    readonly configMasterUrl: string;
+    readonly kiteAccountsSheetName: string;
+    readonly accountSheetName: string;
+    readonly masterSpreadSheetConfigSheetName: string;
+    readonly kiteWsAcc: string;
+    readonly orderLogsSheet: string;
+};
+//# sourceMappingURL=env.d.ts.map
