@@ -43,6 +43,10 @@ export class MarketStore {
 					hasWeekly: row.hasWeekly,
 					currentWeekly: normalizeDate(row.currentWeekly),
 					active: row.active,
+					exch: row.exch,
+					exchSegment: row.exchSegment,
+					xtsExchSegment: row.xtsExchSegment,
+					marginPerLot: Number(row.marginPerLot),
 					dte: Number(row.dte)
 				},
 				currentIndexQuote: {

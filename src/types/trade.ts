@@ -1,4 +1,5 @@
 import { OptionInstrument } from "./market";
+import { OrderLeg } from "./orderHandler";
 
 export type OrderStatus = "entrySent" | "entered" | "exitSent" | "exited";
 export type TradeDirection = "BUY" | "SELL";
@@ -40,4 +41,10 @@ export interface ActiveTradeData {
 	candleHighToCloseRatio: number;
 	candleLowToOpenRatio: number;
 	candleHighLowRatio: number;
+}
+
+export interface OrderObj {
+	cover: Record<string, Partial<OrderLeg>>;
+	primary: Record<string, Partial<OrderLeg>>;
+	margin: Record<string, number>;
 }

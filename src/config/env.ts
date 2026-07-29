@@ -16,6 +16,10 @@ const kiteAccountsSheetName = validateEnv(process.env.KITE_ACCOUNTS_SHEET_NAME, 
 const accountSheetName = validateEnv(process.env.ACCOUNTS_SHEET_NAME, "ACCOUNTS");
 const kiteWsAcc = validateEnv(process.env.KITE_WS_ACC, "KITE_WS_ACC");
 const orderLogsSheet = validateEnv(process.env.ORDER_LOGS_SHEET, "ORDER_LOGS_SHEET");
+const loggerVmUrl = validateEnv(process.env.LOGGER_VM_URL, "LOGGER_VM_URL");
+const botTag = validateEnv(process.env.BOT_TAG, "BOT_TAG");
+const orderHandlerWsUrl = validateEnv(process.env.ORDER_HANDLER_WS_URL, "ORDER_HANDLER_WS_URL");
+
 
 
 
@@ -28,5 +32,8 @@ export const ENV = {
     accountSheetName,
     masterSpreadSheetConfigSheetName,
     kiteWsAcc,
-    orderLogsSheet
+    orderLogsSheet,
+    loggerVmUrl,
+    botTag,
+    orderHandlerWsUrl
 } as const;

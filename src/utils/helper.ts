@@ -1,5 +1,7 @@
 import { globalStates, marketStore } from "../config";
 import { OptionInstrument, OptionStrike, OptionType } from "../types/market";
+import { getCharges } from "./charges";
+import { TransactionType, Type } from "../types/charges";
 
 export function buildKiteQuoteUrls(instruments: number[], batchSize = 490): string[] {
 	if (!instruments.length) {
@@ -177,4 +179,21 @@ export function getOrderTagDateSuffix(datetime: string): string {
 	const mm = datetime.slice(14, 16);
 
 	return `${dd}${month}${yy}${hh}${mm}`;
+}
+
+export function calcCharges(
+	entryPrice: number,
+	exitPrice: number,
+	qty: number,
+	numOrdersEnetred: number,
+	numOrdersExited: number,
+	type: Type,
+	entryTransaction: TransactionType,
+): number {
+	const exitTransaction = entryTransaction.toLowerCase() == "sell" ? 'buy' : 'sell';
+
+	return (
+		getCharges('equity', type, 'ZERODHA', entryTransaction, entryPrice, qty, numOrdersEnetred) +
+		getCharges('equity', type, 'ZERODHA', exitTransaction as TransactionType, exitPrice, qty, numOrdersExited)
+	);
 }

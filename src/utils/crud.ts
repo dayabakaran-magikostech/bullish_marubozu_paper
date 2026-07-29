@@ -38,7 +38,7 @@ export async function crudOperation(
         s_name: sName,
         data: payload.data,
         id: payload.extraParams.id,
-        colName: payload.extraParams.colName,
+        col_name: payload.extraParams.col_name,
       };
       break;
 

@@ -6,10 +6,12 @@ import {
     OptionQuoteUpdate, OptionType, StoreIndexHourlyQuoteInput
 } from "../types/market"; //MarketStore
 
-export { ENV } from "./env";
 export { instrumentsSheet, kiteSheet, apiAccessTokenSheet, masterSpreadsheetConfigSheet } from "./databases";
 import { MarketStore } from "../model/marketStore";
 import { TradeManager } from "../model/tradesManager";
+import { io } from 'socket.io-client';
+import { ENV } from "./env";
+export { ENV } from "./env";
 
 const dd = new Date();
 
@@ -30,8 +32,13 @@ export const globalStates = {
     deltaAdjustment: 0.05,
     deltaChangeFactorK: 1.0065,
     coverDeltaTarget: 0.01,
+    candleWickThreshold: 0.80,
     mainProcessInterval: null as NodeJS.Timeout | null,
-    lotsToTrade: 1
+    lotsToTrade: 1,
+    socket: io(ENV.loggerVmUrl),
+    priceEfficiency: true,
+    volumeEfficiency: true,
+    accountPriority: ["TB1800", "PH6989"]
 };
 
 export const generalConfig = {

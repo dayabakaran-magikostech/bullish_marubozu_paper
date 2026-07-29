@@ -64,8 +64,8 @@ export async function runDecisionEngine(): Promise<any> {
 				// throw error and ping
 			}
 			orderTracker[orderTag] = newOrder;
-			console.log("Initiate trade response: ", initiateTradeRes);
-			console.dir(orderTracker[orderTag], { depth: null });
+			// console.log("Initiate trade response: ", initiateTradeRes);
+			// console.dir(orderTracker[orderTag], { depth: null });
 
 			orderTracker[orderTag].storeEntryDetails(); // do this at the time of initialization -> add this in que and send all at once
 
@@ -107,7 +107,7 @@ function evaluateEntrySignals(open: number, high: number, low: number, close: nu
 	const highToLowRatio = high / low;
 
 	let opportunityExists = false;
-	if (closeFromHighRatio < 0.30 && openFromLowRatio < 0.30) {
+	if (closeFromHighRatio < globalStates.candleWickThreshold && openFromLowRatio < globalStates.candleWickThreshold) {
 		opportunityExists = true;
 		console.log("Checking delta threshold");
 		if (deltaDeviation > deltaDeviationThreshold) {

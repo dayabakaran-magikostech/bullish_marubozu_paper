@@ -18,12 +18,15 @@
     "express": "^5.2.1",
     "node-cron": "^4.6.0",
     "run": "^1.5.0",
+    "socket.io-client": "^4.8.3",
+    "ws": "^8.21.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
