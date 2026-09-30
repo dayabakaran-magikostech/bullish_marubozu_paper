@@ -5,12 +5,17 @@ import {
 } from "./config";
 
 import { runDecisionEngine } from "./index";
+import { createLogFilesOnLoggerVM } from "./logger";
 import { updateInstrumentPrices } from "./services/instrumentPricesUpdator"
+import { notificationHandler } from "./utils/notificationsHandler";
 
 
 
 export async function initializeTheBot(midCrash: boolean = false) {
 	try {
+
+		createLogFilesOnLoggerVM();
+
 		const [instrumentesSheetData, kiteSheetData, apiAccessTokenSheetData, masterSpreadsheetConfigSheetData] = await Promise.all([
 			instrumentsSheet.readInstrumentsMasterSheet(),
 			kiteSheet.readKiteToken(),
@@ -18,7 +23,16 @@ export async function initializeTheBot(midCrash: boolean = false) {
 			masterSpreadsheetConfigSheet.readIndexConfig()
 		]);
 
-		//TODO: ping error if any sheet is empty
+
+		if (!instrumentesSheetData.length) {
+			console.log("instrumentesSheetData is empty");
+			notificationHandler('instrumentes sheet data is empty', { module: 'initializeTheBot', severity: 'High' }, true);
+		}
+
+		if (!masterSpreadsheetConfigSheetData.length) {
+			console.log("masterSpreadsheetConfigSheetData is empty");
+			notificationHandler('masterSpreadsheetConfigSheetData is empty', { module: 'initializeTheBot', severity: 'High' }, true);
+		}
 
 		kiteSheetData.forEach((row) => {
 			if (!row.ACTIVE) return;
@@ -40,11 +54,10 @@ export async function initializeTheBot(midCrash: boolean = false) {
 
 		console.log("Bot initialized successfully");
 
-		//TODO: remove all auto entries
-		// runDecisionEngine();
+		// runDecisionEngine(); // - this is for testing
 	}
 	catch (error) {
 		console.error("[ERROR] Failed to initialize the bot", error);
-		throw error;
+		throw error
 	}
 }

@@ -1,6 +1,8 @@
 // iv cacls
 // delta finder
 
+import { globalStates } from "../config";
+
 /**
  * Calculate a close estimate of implied volatility given an option price.  A
  * binary search type approach is used to determine the implied volatility.
@@ -145,4 +147,104 @@ function callDelta(s: number, k: number, t: number, v: number, r: number): numbe
 function putDelta(s: number, k: number, t: number, v: number, r: number): number {
 	const delta = callDelta(s, k, t, v, r) - 1;
 	return delta === -1 && k === s ? 0 : delta;
+}
+
+function stdNormPDF(x: number): number {
+	/**
+	 * Standard normal probability density function.
+	 */
+	return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+}
+
+function callTheta(s: number, k: number, t: number, v: number, r: number): number {
+	const w = getW(s, k, t, v, r);
+	if (!Number.isFinite(w)) {
+		return 0.0;
+	}
+	const sqrtT = Math.sqrt(t);
+	const d2 = w - v * sqrtT;
+	return (
+		(-v * s * stdNormPDF(w)) / (2 * sqrtT) -
+		r * k * Math.exp(-r * t) * stdNormCDF(d2)
+	);
+}
+
+function putTheta(s: number, k: number, t: number, v: number, r: number): number {
+	const w = getW(s, k, t, v, r);
+	if (!Number.isFinite(w)) {
+		return 0.0;
+	}
+	const sqrtT = Math.sqrt(t);
+	const d2 = w - v * sqrtT;
+	return (
+		(-v * s * stdNormPDF(w)) / (2 * sqrtT) +
+		r * k * Math.exp(-r * t) * stdNormCDF(-d2)
+	);
+}
+
+function getTheta(s: number, k: number, t: number, v: number, r: number, callPut: string, days: number): number {
+	/**
+	 * Theta: sensitivity of option price to time.
+	 * Returns per-day theta (scaled by days).
+	 */
+	if (callPut.toLowerCase() === "call") {
+		return callTheta(s, k, t, v, r) / days;
+	} else if (callPut.toLowerCase() === "put") {
+		return putTheta(s, k, t, v, r) / days;
+	} else {
+		throw new Error("Invalid option type. Use 'call' or 'put'.");
+	}
+}
+
+export function calculateTheoreticalValues(synthFut: number, strike: number, iv: number, dte: number): [number, number] {
+	try {
+		if (!synthFut || synthFut == 0 || !strike || strike == 0 || !iv || !dte) {
+			return [NaN, NaN]
+		}
+
+		const intrinsic = Math.max(strike - synthFut, 0.0);
+		synthFut = Number(synthFut);
+		strike = Number(strike);
+		iv = Number(iv);
+		dte = Number(dte);
+		const t = dte / globalStates.daysPerYear;
+		let price, theta;
+
+		if (t <= 0) {
+			price = intrinsic
+		}
+		else {
+			price = blackScholes(
+				synthFut,
+				strike,
+				t,
+				iv,
+				globalStates.riskFreeRate,
+				"put",
+			)
+		}
+
+		theta = getTheta(
+			synthFut,
+			strike,
+			t,
+			iv,
+			globalStates.riskFreeRate,
+			"put",
+			globalStates.daysPerYear,
+		)
+
+		return [roundToTick(price), theta];
+	}
+	catch (error) {
+		console.log("Error occurred while calculating theoretical greek values: ", error);
+		return [NaN, NaN]
+	}
+}
+
+function roundToTick(price: number, tickSize: number = 0.05): number {
+	if (price <= 0) {
+		return 0.0;
+	}
+	return Math.round(price / tickSize) * tickSize;
 }

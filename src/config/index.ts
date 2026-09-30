@@ -32,18 +32,29 @@ export const globalStates = {
     deltaAdjustment: 0.05,
     deltaChangeFactorK: 1.0065,
     coverDeltaTarget: 0.01,
-    candleWickThreshold: 0.80,
+    candleWickThreshold: 0.3, // 0.3
     mainProcessInterval: null as NodeJS.Timeout | null,
-    lotsToTrade: 1,
+    pnlLoggingInterval: null as NodeJS.Timeout | null,
+    lotsToTrade: 5,
     socket: io(ENV.loggerVmUrl),
     priceEfficiency: true,
     volumeEfficiency: true,
-    accountPriority: ["TB1800", "PH6989"]
+    accountPriority: ["TB1700", "PH8020", "YG2337", "IZH364"],
+    daysPerYear: 249,
+    riskFreeRate: 0.0,
 };
+
+export const tradeConfig = {
+    graceMinutes: 60,
+    hardStop: 30,
+    trailStop: 40,
+    minHwmToTrail: 0
+}
 
 export const generalConfig = {
     mainProcessFreq: 60 * 60 * 1000, // 60 * 1000 => 1 minute // 60 * 60 * 1000 => 1 hour
-    orderTagInitials: "maru"
+    orderTagInitials: "mabu",
+    pnlLoggingFreq: 60 * 1000, // 60 * 1000 => 1 minute
 }
 
 export const orderTracker: Record<string, TradeManager> = {};

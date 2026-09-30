@@ -169,6 +169,10 @@ export class MarketStore {
 			indexData.strikesArr = [...new Set(indexData.strikesArr)].sort(
 				(a, b) => a - b
 			);
+
+			indexData.optionChain = Object.fromEntries(
+				Object.entries(indexData.optionChain).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+			);
 		}
 	}
 }

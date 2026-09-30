@@ -112,3 +112,12 @@ export interface OptionQuoteUpdate {
     ltp: number | null;
     updatedAt: string;
 }
+
+export type updateOptionsPricesAndCalculateGreeksResult = {
+    status: true | false;
+    indexLtp: number | null;
+    atmStrike: number | null;
+    synthFut: number | null;
+    synthAtmStrike: number | null;
+    actualDte: number | null;
+}

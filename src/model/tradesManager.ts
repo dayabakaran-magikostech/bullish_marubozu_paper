@@ -1,84 +1,85 @@
-import { symbol } from "zod";
-import { ENV, globalStates, instrumentStates, marketStore } from "../config";
-import { logEntryOrderToDB } from "../logger";
+import { boolean, string, symbol } from "zod";
+import { ENV, globalStates, instrumentStates, marketStore, orderTracker } from "../config";
+import { logEntryOrderToDB, updateEntryDetailsOnSheet, updateExitDetailsOnSheet } from "../logger";
 import { TransactionType, Type } from "../types/charges";
 import { pnlOrderData } from "../types/logger";
 import { Exchange, ExchangeXTS, OrderHandlerResponseData, OrderLeg, OrderRequest } from "../types/orderHandler";
 import { ActiveTradeData, OrderObj, PositionAction, TradeData, TradeDirection } from "../types/trade"
-import { calcCharges, getCurrTimeStamp } from "../utils/helper";
+import { calcCharges, getCurrTimeStamp, getCalculatedDTE, getNearestStrike, getOptionPrice } from "../utils/helper";
 import { crudOperation } from "../utils/crud";
 import { orderHandler } from "./orderHandler";
+import { notificationHandler } from "../utils/notificationsHandler";
+import { processMarketQuotes, updateInstrumentPrices } from "../services/instrumentPricesUpdator";
+import { calculateTheoreticalValues, getImpliedVolatility } from "../services/optionGreeksCalculator";
 
 export class TradeManager {
 	trade: ActiveTradeData | null = null;
 
-	async initialiizeNewTrade(
+	async initializeNewTrade(
 		orderTag: string, primaryTransaction: TradeDirection, primaryInstrumentToken: number, coverTransaction: TradeDirection, coverInstrumentToken: number,
 		candleHighToCloseRatio: number, candleLowToOpenRatio: number, candleHighLowRatio: number
 	): Promise<boolean> {
 
 		const primaryInstrumentDetails = instrumentStates[primaryInstrumentToken];
 		const coverInstrumentDetails = instrumentStates[coverInstrumentToken];
+
 		if (!primaryInstrumentDetails || !coverInstrumentDetails) {
 			console.log("Instrument details not found");
 			return false;
 		}
-		const lotSize = primaryInstrumentDetails.lotSize;
+
+		const { delta: primaryDelta, expiryDate, index, quote: primary_quote, lotSize } = primaryInstrumentDetails;
+		const { delta: coverDelta, quote: cover_quote } = coverInstrumentDetails;
+
+		const { bid: primary_bid, offer: primary_offer } = primary_quote;
+		const { bid: cover_bid, offer: cover_offer } = cover_quote;
+
 		if (!lotSize) {
 			console.log("Lot size not found");
 			return false;
 		}
-		const primaryQuote = primaryInstrumentDetails.quote;
-		const coverQuote = coverInstrumentDetails.quote;
 
-		if (!primaryQuote || !coverQuote) {
-			console.log("Primary/Cover quote data not found");
-			return false;
-		}
-
-		if (!primaryQuote.bid || primaryQuote.bid == 0 || !primaryQuote.offer || primaryQuote.offer == 0 || !coverQuote.bid || coverQuote.bid == 0 || !coverQuote.offer || coverQuote.offer == 0) {
+		if (!primary_bid || !primary_offer || !cover_bid || !cover_offer) {
 			console.log("Prices are 0 for: ", primaryInstrumentDetails.tradingSymbol, coverInstrumentDetails.tradingSymbol);
 			return false;
 		}
 
 		const lotsToTrade = globalStates.lotsToTrade;
 		const totalQtyToTrade = lotsToTrade * lotSize;
-		const { delta: primaryDelta, expiryDate, index } = instrumentStates[primaryInstrumentToken]!;
-		const { delta: coverDelta } = instrumentStates[coverInstrumentToken]!;
-		const primaryCashReq = primaryTransaction === "BUY" ? (primaryInstrumentDetails.quote.offer! * lotSize * lotsToTrade) : (primaryInstrumentDetails.quote.bid! * lotSize * lotsToTrade);
-		const coverCashReq = coverTransaction === "BUY" ? (coverInstrumentDetails.quote.offer! * lotSize * lotsToTrade) : (coverInstrumentDetails.quote.bid! * lotSize * lotsToTrade);
+
+
+		const primaryCashReq = primaryTransaction === "BUY" ? (primary_offer * lotSize * lotsToTrade) : 0;
+		const coverCashReq = coverTransaction === "BUY" ? (cover_offer * lotSize * lotsToTrade) : 0;
 
 		const primaryTradeData: TradeData = {
-			sentEntryPrice: primaryTransaction === "BUY" ? primaryQuote.offer : primaryQuote.bid,
-			executedEntryPrice: primaryTransaction === "BUY" ? primaryQuote.offer : primaryQuote.bid,
-			sentExitPrice: primaryTransaction == "BUY" ? primaryQuote.bid : primaryQuote.offer,
-			executedExitPrice: primaryTransaction == "BUY" ? primaryQuote.offer : primaryQuote.bid,
+			sentEntryPrice: primaryTransaction === "BUY" ? primary_offer : primary_bid,
+			executedEntryPrice: primaryTransaction === "BUY" ? primary_offer : primary_bid,
+			sentExitPrice: undefined,
+			executedExitPrice: undefined,
 			entryOrdersCount: undefined,
 			exitOrdersCount: undefined,
-			instrumentData: instrumentStates[primaryInstrumentDetails?.instrumentToken!]!,
+			instrumentData: primaryInstrumentDetails,
 			entryDelta: Number(primaryDelta),
 			entryTransaction: primaryTransaction,
 			reqMargin: primaryCashReq,
 			qty: totalQtyToTrade,
-			ordersCount: undefined,
 			charges: undefined,
 			npfPoints: undefined,
 			postChargesNpf: undefined,
 		}
 
 		const coverTradeData: TradeData = {
-			sentEntryPrice: coverTransaction === "BUY" ? coverQuote.offer : coverQuote.bid,
-			executedEntryPrice: coverTransaction === "BUY" ? coverQuote.offer : coverQuote.bid,
-			sentExitPrice: coverTransaction === "BUY" ? coverQuote.bid : coverQuote.offer,
-			executedExitPrice: coverTransaction === "BUY" ? coverQuote.bid : coverQuote.offer,
+			sentEntryPrice: coverTransaction === "BUY" ? cover_offer : cover_bid,
+			executedEntryPrice: coverTransaction === "BUY" ? cover_offer : cover_bid,
+			sentExitPrice: undefined,
+			executedExitPrice: undefined,
 			entryOrdersCount: undefined,
 			exitOrdersCount: undefined,
-			instrumentData: instrumentStates[coverInstrumentDetails?.instrumentToken!]!,
+			instrumentData: coverInstrumentDetails,
 			entryDelta: Number(coverDelta),
 			entryTransaction: coverTransaction,
 			reqMargin: coverCashReq,
 			qty: totalQtyToTrade,
-			ordersCount: undefined,
 			charges: undefined,
 			npfPoints: undefined,
 			postChargesNpf: undefined,
@@ -91,7 +92,7 @@ export class TradeManager {
 			index,
 			account: '',
 			expiry: expiryDate!,
-			active: true,
+			active: false,
 			orderStatus: "entrySent",
 			primaryOrderData: primaryTradeData,
 			coverOrderData: coverTradeData,
@@ -100,17 +101,25 @@ export class TradeManager {
 			candleHighToCloseRatio: candleHighToCloseRatio,
 			candleLowToOpenRatio: candleLowToOpenRatio,
 			candleHighLowRatio: candleHighLowRatio,
+			entrySynthFut: 0,
+			entryPrimaryIv: 0,
+			entryCoverIv: 0,
+			theoreticalThetaPerQty: 0,
+			theroreticalPrimaryTheta: 0,
+			theoreticalCoverTheta: 0,
+			theoreticalThetaPnl: 0,
+			theoreticalTheta: 0,
+			gap: 0,
+			hwm: -Infinity,
 		};
 
 		this.trade = tradeTrackerObj;
 		console.log("Trade initialized for orderTag: ", orderTag);
-		// console.dir(tradeTrackerObj, { depth: null });
 
-		const orderRequestObj = this.createOrderLeg('ENTRY');
-		if (!orderRequestObj) { throw new Error("Error while creating order request obj at entry for order tag: " + orderTag); }
+		const orderRequestObj = this.createOrderReqObj('ENTRY');
+		if (!orderRequestObj || orderRequestObj == undefined) { throw new Error("Error while creating order request obj at entry for order tag: " + orderTag); }
 
 		this.initiateTrade(orderRequestObj, 'ENTRY');
-		// placeEntryOrder: orderRequestObj
 		return true;
 	}
 
@@ -119,8 +128,9 @@ export class TradeManager {
 		console.log("Log entry response: ", logRes);
 	}
 
-	async calcPnl() {
-		if (!this.trade) { return; }
+	public calcPnl() {
+
+		if (!this.trade) return;
 		const { executedEntryPrice: primaryExecutedEntry, instrumentData: primaryInstrumentData, entryTransaction: primaryTransaction, qty } = this.trade.primaryOrderData;
 		const { executedEntryPrice: coverExecutedEntry, instrumentData: coverInstrumentData, entryTransaction: coverTransaction } = this.trade.coverOrderData;
 		if (!primaryExecutedEntry || !coverExecutedEntry || !qty) {
@@ -142,8 +152,9 @@ export class TradeManager {
 		const primaryPnl = primaryTransaction === "BUY" ? (primaryExitPrice - primaryExecutedEntry) * qty : (primaryExecutedEntry - primaryExitPrice) * qty;
 		const primaryCharges = calcCharges(primaryExecutedEntry, primaryExitPrice, qty, 1, 1, primaryInstrumentData.type?.toLowerCase() as Type, primaryTransaction?.toLowerCase() as TransactionType);
 		const coverPnl = coverTransaction === "BUY" ? (coverExitPrice - coverExecutedEntry) * qty : (coverExecutedEntry - coverExitPrice) * qty;
+		// fix hardcoded 1, 1 in charges function
 		const coverCharges = calcCharges(coverExecutedEntry, coverExitPrice, qty, 1, 1, coverInstrumentData.type?.toLowerCase() as Type, coverTransaction?.toLowerCase() as TransactionType);
-		const totalPnl = ((primaryPnl + coverPnl) - (primaryCharges + coverCharges)) * qty;
+		const totalPnl = ((primaryPnl + coverPnl) - (primaryCharges + coverCharges));
 
 		const pnlObj = {
 			orderTag: this.trade.orderTag,
@@ -166,105 +177,166 @@ export class TradeManager {
 		return pnlObj;
 	}
 
-	public createOrderLeg(position: PositionAction): OrderObj | any {
-		const orderData: OrderObj = { cover: {}, primary: {}, margin: { cash: 0, total: 0 } };
+	public createOrderReqObj(position: PositionAction): OrderObj | undefined {
+		try {
+			// optimize and try loop and fill
+			const orderData: OrderObj = { cover: {}, primary: {}, margin: { cash: 0, total: 0 } };
 
-		const data = this.trade;
-		if (!data) return false;
+			const data = this.trade;
+			if (!data) return;
+			const { index, primaryOrderData: primary, coverOrderData: cover, active } = data;
+			if (!marketStore.indexes[index]) throw new Error('Index data is missing');
+			const { lotSize, exch, exchSegment, xtsExchSegment, marginPerLot } = marketStore.indexes[index].config;
 
-		const isEntry = position === 'ENTRY';
-		// const { index, qty, primary, cover, hasCover, exited } = data;
-		const { index, primaryOrderData: primary, coverOrderData: cover, active } = data;
-		const { qty, instrumentData: primaryInstrumentData } = primary;
-		const { instrumentData: coverInstrumentData } = cover;
-		if (!index || !primary || !qty) throw new Error('Data is missing can not create order leg');
+			const isEntry = position === 'ENTRY';
+			if (isEntry) {
+				// const { index, qty, primary, cover, hasCover, exited } = data;
+				const { qty, instrumentData: primaryInstrumentData } = primary;
+				const { instrumentData: coverInstrumentData } = cover;
+				if (!index || !primary || !qty) throw new Error('Data is missing can not create order leg');
 
-		if (!active) return false;
-		if (!primaryInstrumentData) throw new Error('Primary instrument data is missing');
-		if (!coverInstrumentData) throw new Error('Cover instrument data is missing');
+				if (!primaryInstrumentData) throw new Error('Primary instrument data is missing');
+				if (!coverInstrumentData) throw new Error('Cover instrument data is missing');
+				const {
+					instrumentToken: primaryInstrumentToken, exchangeToken: primaryExchangeToken,
+					tradingSymbol: primaryTradingSymbol, quote: primaryQuote, tickSize: primaryTickSize,
+					type: primaryType
+				} = primaryInstrumentData;
 
-		if (!marketStore.indexes[index]) throw new Error('Index data is missing');
+				const {
+					instrumentToken: coverInstrumentToken, exchangeToken: coverExchangeToken,
+					tradingSymbol: coverTradingSymbol, quote: coverQuote, tickSize: coverTickSize,
+					type: coverType
+				} = coverInstrumentData;
 
-		const { lotSize, exch, exchSegment, xtsExchSegment, marginPerLot } = marketStore.indexes[index].config;
-		const {
-			instrumentToken: primaryInstrumentToken, exchangeToken: primaryExchangeToken,
-			tradingSymbol: primaryTradingSymbol, quote: primaryQuote, tickSize: primaryTickSize,
-			type: primaryType
-		} = primaryInstrumentData;
+				if (!primaryInstrumentToken || !primaryExchangeToken || !primaryTradingSymbol || !primaryTickSize) {
+					throw new Error("Instrument data not found for Primary");
+				}
 
-		const {
-			instrumentToken: coverInstrumentToken, exchangeToken: coverExchangeToken,
-			tradingSymbol: coverTradingSymbol, quote: coverQuote, tickSize: coverTickSize,
-			type: coverType
-		} = coverInstrumentData;
+				if (!coverInstrumentToken || !coverExchangeToken || !coverTradingSymbol) {
+					throw new Error("Instrument data not found for Cover");
+				}
 
-		if (!primaryQuote || !coverQuote) throw new Error('Quote data is missing');
-		if (!primaryQuote.bid || !coverQuote.offer || primaryQuote.bid == 0 || coverQuote.offer == 0) throw new Error('Prices are zero');
-		const buyMarginReq = coverQuote.offer * qty;
-		const lotsToBuy = qty / lotSize;
+				if (!primaryQuote || !coverQuote) throw new Error('Quote data is missing');
 
+				const { bid: primary_bid, offer: primary_offer } = primaryQuote;
+				const { bid: cover_bid, offer: cover_offer } = coverQuote;
+				if (!primary_bid || !cover_offer) throw new Error('Prices are zero');
+				const buyMarginReq = cover_offer * qty; // check transaction and fill
+				const lotsToBuy = qty / lotSize;
 
-		orderData.primary[primaryTradingSymbol] = this.generateOrderData(
-			primaryInstrumentToken,
-			primaryExchangeToken!,
-			primaryTradingSymbol,
-			primaryQuote.bid,
-			"SELL",
-			lotSize,
-			exchSegment,
-			xtsExchSegment,
-			qty,
-			primaryTickSize!,
-			primaryType!
-		);
+				orderData.primary[primaryTradingSymbol] = {
+					instrument_token: primaryInstrumentToken,
+					exchange_token: primaryExchangeToken,
+					tradingsymbol: primaryTradingSymbol,
+					transaction_type: "SELL", //use transaction from params
+					exchange: exchSegment as Exchange,
+					exchange_xts: xtsExchSegment as ExchangeXTS,
+					price: primary_bid,
+					quantity: qty,
+					lot_size: lotSize,
+					validity: 'DAY',
+					product: 'NRML',
+					order_type: 'LIMIT',
+					tick_size: primaryTickSize,
+					trade_spread_pct: 1,
+					orderTrackerKey: primaryType
+				}
 
-		orderData.cover[coverTradingSymbol] = this.generateOrderData(
-			coverInstrumentToken,
-			coverExchangeToken!,
-			coverTradingSymbol,
-			coverQuote.offer,
-			"BUY",
-			lotSize,
-			exchSegment,
-			xtsExchSegment,
-			qty,
-			coverTickSize!,
-			coverType!
-		);
+				orderData.cover[coverTradingSymbol] = {
+					instrument_token: coverInstrumentToken,
+					exchange_token: coverExchangeToken,
+					tradingsymbol: coverTradingSymbol,
+					transaction_type: "BUY",
+					exchange: exchSegment as Exchange,
+					exchange_xts: xtsExchSegment as ExchangeXTS,
+					price: cover_offer,
+					quantity: qty,
+					lot_size: lotSize,
+					validity: 'DAY',
+					product: 'NRML',
+					order_type: 'LIMIT',
+					tick_size: primaryTickSize,
+					trade_spread_pct: 1,
+					orderTrackerKey: coverType
+				}
 
-		orderData.margin.cash = buyMarginReq;
-		orderData.margin.total = (marginPerLot * lotsToBuy);
+				orderData.margin.cash = buyMarginReq;
+				orderData.margin.total = (marginPerLot * lotsToBuy);
+			}
+			else {
 
-		return orderData;
+				const { instrumentData: primaryInstrumentData, entryTransaction: primaryTransaction, qty } = data.primaryOrderData;
+				const { instrumentData: coverInstrumentData, entryTransaction: coverTransaction } = data.coverOrderData;
 
-	}
+				const {
+					tradingSymbol: primaryTradingSymbol,
+					instrumentToken: primaryInstrumentToken,
+					exchangeToken: primaryExchangeToken,
+					quote: primaryQuote,
+					tickSize: primaryTickSize,
+					type: primaryType,
+				} = primaryInstrumentData!;
 
-	public generateOrderData(
-		instrumentToken: number, exchangeToken: number, tradingsymbol: string,
-		price: number, transactionType: TradeDirection,
-		lotSize: number, exchSegment: string, xtsExchSegment: string,
-		qty: number, tickSize: number, optType: string
-	): Partial<OrderLeg> {
-		return {
-			instrument_token: instrumentToken,
-			exchange_token: exchangeToken,
-			tradingsymbol,
-			transaction_type: transactionType,
-			exchange: exchSegment as Exchange,
-			exchange_xts: xtsExchSegment as ExchangeXTS,
-			price,
-			quantity: qty,
-			lot_size: lotSize,
-			validity: 'DAY',
-			product: 'NRML',
-			order_type: 'LIMIT',
-			tick_size: tickSize,
-			trade_spread_pct: 1,
-			orderTrackerKey: optType
+				const {
+					tradingSymbol: coverTradingSymbol,
+					instrumentToken: coverInstrumentToken,
+					exchangeToken: coverExchangeToken,
+					quote: coverQuote,
+					tickSize: coverTickSize,
+					type: coverType,
+				} = coverInstrumentData!;
+
+				orderData.primary[primaryTradingSymbol] = {
+					instrument_token: primaryInstrumentToken,
+					exchange_token: primaryExchangeToken!,
+					tradingsymbol: primaryTradingSymbol,
+					transaction_type: primaryTransaction == "BUY" ? "SELL" : "BUY",
+					exchange: exchSegment as Exchange,
+					exchange_xts: xtsExchSegment as ExchangeXTS,
+					price: primaryTransaction == "BUY" ? primaryQuote.bid! : primaryQuote.offer!,
+					quantity: qty,
+					lot_size: lotSize,
+					validity: 'DAY',
+					product: 'NRML',
+					order_type: 'LIMIT',
+					tick_size: primaryTickSize!,
+					trade_spread_pct: 1,
+					orderTrackerKey: primaryType
+				}
+
+				orderData.cover[coverTradingSymbol] = {
+					instrument_token: coverInstrumentToken,
+					exchange_token: coverExchangeToken!,
+					tradingsymbol: coverTradingSymbol,
+					transaction_type: coverTransaction == "BUY" ? "SELL" : "BUY",
+					exchange: exchSegment as Exchange,
+					exchange_xts: xtsExchSegment as ExchangeXTS,
+					price: coverTransaction == "BUY" ? coverQuote.bid! : coverQuote.offer!,
+					quantity: qty,
+					lot_size: lotSize,
+					validity: 'DAY',
+					product: 'NRML',
+					order_type: 'LIMIT',
+					tick_size: coverTickSize!,
+					trade_spread_pct: 1,
+					orderTrackerKey: coverType
+				}
+
+				orderData.margin.cash = 0;
+				orderData.margin.total = 0;
+			}
+
+			return orderData;
+		}
+		catch (error) {
+			console.log("Error occurred while creating the orders obj: ", error);
+			notificationHandler('Error occurred while creating the orders obj', { module: 'createOrderReqObj', severity: 'High' }, true);
+			return undefined;
 		}
 	}
 
-	public onOrderCompletion(resoponseData: OrderHandlerResponseData): boolean {
+	public async onOrderCompletion(resoponseData: OrderHandlerResponseData): Promise<boolean> {
 		try {
 			const { tag, entryExitType: positionAction, traded_account: tradedAccount } = resoponseData;
 			const activeTrade = this.trade;
@@ -272,9 +344,22 @@ export class TradeManager {
 			if (!activeTrade || !activeTrade.primaryOrderData || !activeTrade.coverOrderData) throw new Error(`Trade not found for tag ${tag}`);
 			if (!tradedAccount) throw new Error(`Account not found for tag ${tag} in the order postback`);
 
+			console.dir(resoponseData, { depth: null });
+
+			const primaryInstrumentData = activeTrade.primaryOrderData.instrumentData;
+			const coverInstrumentData = activeTrade.coverOrderData.instrumentData;
+
+			if (!primaryInstrumentData || !coverInstrumentData) {
+				console.log("Instrument data not found for primary/cover");
+				return false;
+			}
+
+			const { tradingSymbol: primaryTradingSymbol } = primaryInstrumentData;
+			const { tradingSymbol: coverTradingSymbol } = coverInstrumentData;
+
 			if (
-				(positionAction === 'EXIT' && activeTrade.active && activeTrade.orderStatus !== 'exitSent') ||
-				(positionAction === 'ENTRY' && activeTrade.active && activeTrade.orderStatus !== 'entrySent')
+				(positionAction === 'EXIT' && activeTrade.orderStatus !== 'exitSent') ||
+				(positionAction === 'ENTRY' && activeTrade.orderStatus !== 'entrySent')
 			) {
 				console.error(`Trade already processed for ${tag}.`);
 				return false;
@@ -287,8 +372,6 @@ export class TradeManager {
 				return false;
 			}
 
-			const primaryTradingSymbol = activeTrade.primaryOrderData.instrumentData?.tradingSymbol;
-			const coverTradingSymbol = activeTrade.coverOrderData.instrumentData?.tradingSymbol;
 			const primaryOrderLeg = primaryBasket[primaryTradingSymbol!];
 			if (!primaryOrderLeg) {
 				console.log("Primary order leg not found in order postback response");
@@ -318,9 +401,19 @@ export class TradeManager {
 				activeTrade.coverOrderData.entryOrdersCount = coverNumOrders;
 				activeTrade.account = tradedAccount;
 				activeTrade.orderStatus = "entered";
-
+				activeTrade.active = true;
 				console.log("Order successfully entered: ", tag);
-				this.updateEntryDetails(tradedAccount, primaryAvgPrice, primaryNumOrders, coverAvgPrice, coverNumOrders, tag!);
+				const isGreeksStored = await calculateAndStoreEntryGreeks(tag!);
+				if (!isGreeksStored) {
+					notificationHandler('Failed to calculated entry level greeks', { module: 'onOrderCompletion', severity: 'High' }, true);
+				}
+				const res = await updateEntryDetailsOnSheet(tradedAccount, primaryAvgPrice, primaryNumOrders, coverAvgPrice, coverNumOrders, tag!);
+				if (res == true) {
+					console.log("Order completion data updated on the sheet");
+				}
+				else {
+					console.log("Failed to update order completion data on the sheet");
+				}
 			}
 			else {
 				activeTrade.primaryOrderData.executedExitPrice = primaryAvgPrice;
@@ -328,14 +421,38 @@ export class TradeManager {
 				activeTrade.coverOrderData.executedExitPrice = coverAvgPrice;
 				activeTrade.coverOrderData.exitOrdersCount = coverNumOrders;
 				activeTrade.orderStatus = "exited";
+				const pnlObj = this.calcPnl();
+				// fix pnl obj - use exited price
+				if (!pnlObj) {
+					console.log("Error occurred while calculation pnl")
+					return false;
+				}
 
 				console.log("Order successfully exited: ", tag);
+				const res = await updateExitDetailsOnSheet(
+					tag!,
+					getCurrTimeStamp(new Date()),
+					primaryAvgPrice,
+					primaryAvgPrice,
+					primaryNumOrders,
+					coverAvgPrice,
+					coverAvgPrice,
+					coverNumOrders,
+					pnlObj.totalPnl,
+					(pnlObj.primaryCharges + pnlObj.coverCharges)
+				);
+				if (res == true) {
+					console.log("Order completion data updated on the sheet");
+				}
+				else {
+					console.log("Failed to update order completion data on the sheet");
+				}
 			}
 
 			return true;
 		}
 		catch (error) {
-			console.log('Error while handling Post back', (error as Error).message);
+			console.log('Error while handeling Post back', (error as Error).message);
 			return false;
 		}
 	}
@@ -361,33 +478,6 @@ export class TradeManager {
 		return { avgPrice, numOrders };
 	}
 
-	public async updateEntryDetails(
-		tradedAccount: string, primaryExecutedEntryPrice: number, primaryEntryOrdersCount: number,
-		coverExecutedEntryPrice: number, coverEntryOrdersCount: number, tag: string
-	) {
-		const dataUpdationObj = {
-			orderStatus: "entered",
-			account: tradedAccount,
-			primaryExecutedEntryPrice: primaryExecutedEntryPrice,
-			primaryEntryOrdersCount: primaryEntryOrdersCount,
-			coverExecutedEntryPrice: coverExecutedEntryPrice,
-			coverEntryOrdersCount: coverEntryOrdersCount,
-		}
-
-
-		const crudRes = await crudOperation(
-			ENV.liveBotDbUrl, ENV.orderLogsSheet,
-			{
-				actionType: "update",
-				data: dataUpdationObj as any,
-				extraParams: {
-					id: tag,
-					col_name: "orderTag"
-				}
-			}
-		);
-	}
-
 	private initiateTrade(orderReq: OrderObj, position: PositionAction): boolean {
 		try {
 			const trade = this.trade;
@@ -404,7 +494,7 @@ export class TradeManager {
 			const cash = orderReq.margin.cash;
 			const total = orderReq.margin.total;
 
-			if (!cash || !total) throw new Error("Margin is not provided");
+			if (isEntry && (!cash || !total)) throw new Error("Margin is not provided");
 
 			const orderPlacementObj: OrderRequest = {
 				type: 'placeOrder',
@@ -417,7 +507,7 @@ export class TradeManager {
 				cover_orders: orderReq.cover,
 				primary_orders: orderReq.primary,
 			};
-			// console.log('order obj: ', JSON.stringify(orderPlacementObj));
+			console.log('order obj: ', JSON.stringify(orderPlacementObj));
 			orderHandler.placeOrder(orderPlacementObj);
 			return true;
 		} catch (error) {
@@ -427,4 +517,304 @@ export class TradeManager {
 			return false;
 		}
 	}
+
+	public exitTrade(): boolean {
+		const exitOrderObj = this.createOrderReqObj("EXIT");
+		if (!exitOrderObj) {
+			console.log("Failed to create exit order obj");
+			return false;
+		}
+		const exitOrderRes = this.initiateTrade(exitOrderObj, "EXIT");
+		return exitOrderRes;
+	}
+
+	public loadTradeFromStoredData(
+		headers: string[],
+		row: any[]
+	): boolean {
+		try {
+			const stored = this.rowToObject(headers, row);
+			const orderTag = String(stored.orderTag ?? "");
+			if (!orderTag) {
+				throw new Error("orderTag missing from stored trade");
+			}
+			const primaryInstrumentToken = Number(stored.primaryInstrumentToken);
+			const coverInstrumentToken = Number(stored.coverInstrumentToken);
+			if (!primaryInstrumentToken || !coverInstrumentToken) {
+				throw new Error(
+					`Instrument tokens missing for stored trade ${orderTag}`
+				);
+			}
+			const primaryInstrumentData = instrumentStates[primaryInstrumentToken];
+			const coverInstrumentData = instrumentStates[coverInstrumentToken];
+			if (!primaryInstrumentData) {
+				throw new Error(
+					`Primary instrument ${primaryInstrumentToken} not found in instrumentStates`
+				);
+			}
+			if (!coverInstrumentData) {
+				throw new Error(
+					`Cover instrument ${coverInstrumentToken} not found in instrumentStates`
+				);
+			}
+			const qty = Number(stored.qty);
+			if (!qty || qty <= 0) {
+				throw new Error(
+					`Invalid qty for stored trade ${orderTag}: ${stored.qty}`
+				);
+			}
+
+			const primaryTradeData: TradeData = {
+				sentEntryPrice: this.toOptionalNumber(stored.primarySentEntryPrice),
+				executedEntryPrice: this.toOptionalNumber(stored.primaryExecutedEntryPrice),
+				sentExitPrice: this.toOptionalNumber(stored.primarySentExitPrice),
+				executedExitPrice: this.toOptionalNumber(stored.primaryExecutedExitPrice),
+				entryOrdersCount: this.toOptionalNumber(stored.primaryEntryOrdersCount),
+				exitOrdersCount: this.toOptionalNumber(stored.primaryExitOrdersCount),
+				instrumentData: primaryInstrumentData,
+				entryDelta: this.toOptionalNumber(stored.primaryEntryDelta) ?? 0,
+				entryTransaction: String(stored.primaryEntryTransaction).toUpperCase() as TradeDirection,
+				reqMargin: this.toOptionalNumber(stored.primaryReqMargin) ?? 0,
+				qty,
+				charges: undefined,
+				npfPoints: undefined,
+				postChargesNpf: undefined,
+			};
+
+			const coverTradeData: TradeData = {
+				sentEntryPrice: this.toOptionalNumber(stored.coverSentEntryPrice),
+				executedEntryPrice: this.toOptionalNumber(stored.coverExecutedEntryPrice),
+				sentExitPrice: this.toOptionalNumber(stored.coverSentExitPrice),
+				executedExitPrice: this.toOptionalNumber(stored.coverExecutedExitPrice),
+				entryOrdersCount: this.toOptionalNumber(stored.coverEntryOrdersCount),
+				exitOrdersCount: this.toOptionalNumber(stored.coverExitOrdersCount),
+				instrumentData: coverInstrumentData,
+				entryDelta: this.toOptionalNumber(stored.coverEntryDelta) ?? 0,
+				entryTransaction: String(stored.coverEntryTransaction).toUpperCase() as TradeDirection,
+				reqMargin: this.toOptionalNumber(stored.coverReqMargin) ?? 0,
+				qty,
+				charges: undefined,
+				npfPoints: undefined,
+				postChargesNpf: undefined,
+			};
+
+			const trade: ActiveTradeData = {
+				orderTag,
+				entryTime: String(stored.entryTime ?? ""),
+				exitTime: String(stored.exitTime ?? ""),
+				index: String(stored.index),
+				account: String(stored.account ?? ""),
+				expiry: String(stored.expiry),
+				active: this.toBoolean(stored.active),
+				orderStatus: stored.orderStatus as ActiveTradeData["orderStatus"],
+				primaryOrderData: primaryTradeData,
+				coverOrderData: coverTradeData,
+				totalCharges: this.toOptionalNumber(stored.totalCharges) ?? 0,
+				postChargesPnl: this.toOptionalNumber(stored.postChargesPnl) ?? 0,
+				candleHighToCloseRatio: this.toOptionalNumber(stored.candleHighToCloseRatio) ?? 0,
+				candleLowToOpenRatio: this.toOptionalNumber(stored.candleLowToOpenRatio) ?? 0,
+				candleHighLowRatio: this.toOptionalNumber(stored.candleHighLowRatio) ?? 0,
+				/*
+				 * These are NOT currently present in your stored table.
+				 * They can either:
+				 *
+				 * 1. be recalculated after loading
+				 * 2. be added to DB
+				 * 3. temporarily start at 0
+				 */
+				entrySynthFut: 0,
+				entryPrimaryIv: 0,
+				entryCoverIv: 0,
+				theoreticalThetaPerQty: 0,
+				theroreticalPrimaryTheta: 0,
+				theoreticalCoverTheta: 0,
+				theoreticalThetaPnl: 0,
+				theoreticalTheta: 0,
+				gap: 0,
+
+				/*
+				 * HWM should generally be recalculated if you're resuming
+				 * an active trade.
+				 */
+				hwm: -Infinity,
+			};
+
+			this.trade = trade;
+
+			console.log(
+				`Stored trade loaded successfully: ${orderTag}`,
+				{
+					status: trade.orderStatus,
+					active: trade.active,
+					account: trade.account,
+					qty,
+					primary: primaryInstrumentData.tradingSymbol,
+					cover: coverInstrumentData.tradingSymbol,
+				}
+			);
+
+			return true;
+		}
+		catch (error) {
+			console.error(
+				"Failed to load stored trade:",
+				error instanceof Error ? error.message : error
+			);
+
+			notificationHandler(
+				`Failed to load stored trade: ${error instanceof Error
+					? error.message
+					: "Unknown error"
+				}`,
+				{
+					module: "loadTradeFromStoredData",
+					severity: "High",
+				},
+				true
+			);
+
+			return false;
+		}
+	}
+
+	private rowToObject(
+		headers: string[],
+		row: any[]
+	): Record<string, any> {
+		const obj: Record<string, any> = {};
+		for (let i = 0; i < headers.length; i++) {
+			obj[headers[i]!] = row[i];
+		}
+		return obj;
+	}
+
+	private toOptionalNumber(value: any): number | undefined {
+		if (
+			value === null ||
+			value === undefined ||
+			value === ""
+		) {
+			return undefined;
+		}
+		const num = Number(value);
+		return Number.isFinite(num)
+			? num
+			: undefined;
+	}
+
+	private toBoolean(value: any): boolean {
+		if (typeof value === "boolean") {
+			return value;
+		}
+		if (typeof value === "number") {
+			return value === 1;
+		}
+		if (typeof value === "string") {
+			const normalized = value
+				.trim()
+				.toLowerCase();
+			return (
+				normalized === "true" ||
+				normalized === "1" ||
+				normalized === "yes"
+			);
+		}
+		return false;
+	}
+}
+
+async function calculateAndStoreEntryGreeks(orderTag: string): Promise<boolean> {
+	try {
+
+		// use quote for index 
+		// handle if quote fails - use old prices
+
+		const optionsInstruments = marketStore.allOptionTokens;
+		if (!optionsInstruments) { throw new Error("Nifty option instrument tokens not found"); }
+		const res = await updateInstrumentPrices(optionsInstruments);
+		console.log("Option instruments updated: ", res);
+		if (res.failedBatches > 0) {
+			notificationHandler('quote error occurred while updating instrument prices', { module: 'updateOptionsPricesAndCalculateGreeks', severity: 'High' }, true);
+		}
+
+		const indexData = marketStore.indexes.NIFTY;
+		if (!indexData) {
+			console.log("IndexData is missing");
+			notificationHandler('IndexData is missing', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+			throw new Error(`IndexData is missing`);
+		};
+		const indexLtp = indexData.currentIndexQuote?.ltp;
+		const currentWeeklyDte = indexData.config.dte;
+		const actualDte = currentWeeklyDte + getCalculatedDTE();
+		if (!indexLtp || indexLtp <= 0) {
+			console.log("Index ltp is missing");
+			notificationHandler('Index ltp is missing', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+			throw new Error(`Index ltp is missing`);
+		}
+
+		const atmStrike = getNearestStrike("NIFTY", indexLtp);
+		if (!atmStrike) {
+			console.log("ATM strike not found");
+			notificationHandler('ATM strike not found', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+			throw new Error(`ATM strike not found`);
+		}
+
+		const atmCePrice = getOptionPrice(indexData.optionChain[atmStrike]?.CE);
+		const atmPePrice = getOptionPrice(indexData.optionChain[atmStrike]?.PE);
+		if (!atmCePrice || !atmPePrice) {
+			console.log("ATM CE / PE prices are missing");
+			notificationHandler('ATM CE / PE prices are missing', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+			throw new Error(`ATM CE / PE prices are missing`);
+		};
+		const synthFut = atmStrike + atmCePrice - atmPePrice;
+
+
+		const order = orderTracker[orderTag]?.trade;
+		const primaryEntryPrice = order?.primaryOrderData.executedEntryPrice;
+		const coverEntryPrice = order?.coverOrderData.executedEntryPrice;
+		const primaryInstrumentData = order?.primaryOrderData.instrumentData;
+		const coverInstrumentData = order?.coverOrderData.instrumentData;
+
+		const primaryIv = getImpliedVolatility(primaryEntryPrice!, synthFut, primaryInstrumentData?.strikePrice!, actualDte / globalStates.daysPerYear, "put", 0.0);
+		const coverIv = getImpliedVolatility(coverEntryPrice!, synthFut, coverInstrumentData?.strikePrice!, actualDte / globalStates.daysPerYear, "put", 0.0);
+
+		console.log(primaryEntryPrice!, synthFut, primaryInstrumentData?.strikePrice!, actualDte / globalStates.daysPerYear, "put", 0.0);
+		console.log("Primary IV: ", primaryIv);
+
+		order!.entrySynthFut = synthFut;
+		order!.entryPrimaryIv = primaryIv;
+		order!.entryCoverIv = coverIv;
+
+		calculateTheoreticalTheta(orderTag);
+
+		return true;
+	}
+	catch (error) {
+		console.log("Error occurred while calculating the entry greeks: ", error);
+		return false;
+	}
+}
+
+export function calculateTheoreticalTheta(orderTag: string): number {
+	const indexData = marketStore.indexes.NIFTY;
+	if (!indexData) {
+		console.log("IndexData is missing");
+		notificationHandler('IndexData is missing', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+		throw new Error(`IndexData is missing`);
+	};
+	const currentWeeklyDte = indexData.config.dte;
+	const order = orderTracker[orderTag]?.trade;
+	const actualDte = currentWeeklyDte + getCalculatedDTE();
+
+	const [primaryTheoreticalPrice, primaryTheoreticalTheta] = calculateTheoreticalValues(order!.entrySynthFut, order?.primaryOrderData.instrumentData?.strikePrice!, order!.entryPrimaryIv, actualDte);
+	const [coverTheoreticalPrice, coverTheoreticalTheta] = calculateTheoreticalValues(order!.entrySynthFut, order?.coverOrderData.instrumentData?.strikePrice!, order!.entryCoverIv, actualDte);
+
+	order!.theroreticalPrimaryTheta = primaryTheoreticalTheta;
+	order!.theoreticalCoverTheta = coverTheoreticalTheta;
+	order!.theoreticalThetaPerQty = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 375);
+	const theoreticalTheta = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 375) * (order?.primaryOrderData.qty!)
+	order!.theoreticalTheta = theoreticalTheta;
+	order!.theoreticalThetaPnl += theoreticalTheta;
+
+	return order!.theoreticalThetaPnl;
 }

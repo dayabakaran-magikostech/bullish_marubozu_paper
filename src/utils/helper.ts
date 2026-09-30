@@ -125,16 +125,17 @@ export function getOptionPrice(option: OptionInstrument | undefined): number | n
 	const offer = option.quote!.offer;
 	const ltp = option.quote!.ltp;
 
-	return bid;
+	return (bid! + offer!) / 2;
 }
 
-export function getNearestPutDeltaOption(index: string, targetDelta: number): OptionInstrument | null {
+export function getNearestPutDeltaOption(index: string, targetDelta: number, synthAtmStrike: number): OptionInstrument | null {
 	const indexData = marketStore.indexes[index.trim().toUpperCase()];
 	if (!indexData) return null;
 	let nearest: OptionInstrument | null = null;
 	let nearestDistance = Infinity;
 
 	for (const strike of Object.values(indexData.optionChain)) {
+
 		const pe = strike.PE;
 		if (!pe || pe.delta == null) {
 			continue;
@@ -143,6 +144,10 @@ export function getNearestPutDeltaOption(index: string, targetDelta: number): Op
 		if (distance < nearestDistance) {
 			nearestDistance = distance;
 			nearest = pe;
+		}
+
+		if (strike.strikePrice > synthAtmStrike) {
+			break;
 		}
 	}
 	return nearest;
@@ -197,3 +202,5 @@ export function calcCharges(
 		getCharges('equity', type, 'ZERODHA', exitTransaction as TransactionType, exitPrice, qty, numOrdersExited)
 	);
 }
+
+export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

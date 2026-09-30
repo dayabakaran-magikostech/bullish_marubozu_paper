@@ -294,3 +294,93 @@ const quotes = {
 		}
 	}
 }
+
+const orderTracker = {
+	trade: {
+		orderTag: 'maru-2409261400',
+		entryTime: '2026-09-24 14:00:08.385',
+		exitTime: '',
+		index: 'NIFTY',
+		account: 'PH6989',
+		expiry: '2026-09-29',
+		active: true,
+		orderStatus: 'entered',
+		primaryOrderData: {
+			sentEntryPrice: 58.15,
+			executedEntryPrice: 58.15,
+			sentExitPrice: 58.35,
+			executedExitPrice: 58.15,
+			entryOrdersCount: 1,
+			exitOrdersCount: undefined,
+			instrumentData: {
+				id: 164,
+				tradingSymbol: 'NIFTY26SEP22800PE',
+				index: 'NIFTY',
+				type: 'PE',
+				strikePrice: 22800,
+				expiryDate: '2026-09-29',
+				instrumentToken: 18917378,
+				exchangeToken: 73896,
+				lotSize: 65,
+				tickSize: 0.05,
+				quote: {
+					bid: 58.15,
+					offer: 58.35,
+					ltp: 58.15,
+					updatedAt: '2026-09-24 14:00:08'
+				},
+				iv: 0.11992187499999998,
+				delta: -0.24293341734522356
+			},
+			entryDelta: -0.24293341734522356,
+			entryTransaction: 'SELL',
+			reqMargin: 3779.75,
+			qty: 65,
+			ordersCount: undefined,
+			charges: undefined,
+			npfPoints: undefined,
+			postChargesNpf: undefined
+		},
+		coverOrderData: {
+			sentEntryPrice: 3.45,
+			executedEntryPrice: 3.45,
+			sentExitPrice: 3.35,
+			executedExitPrice: 3.35,
+			entryOrdersCount: 1,
+			exitOrdersCount: undefined,
+			instrumentData: {
+				id: 135,
+				tradingSymbol: 'NIFTY26SEP21350PE',
+				index: 'NIFTY',
+				type: 'PE',
+				strikePrice: 21350,
+				expiryDate: '2026-09-29',
+				instrumentToken: 18871554,
+				exchangeToken: 73717,
+				lotSize: 65,
+				tickSize: 0.05,
+				quote: {
+					bid: 3.35,
+					offer: 3.45,
+					ltp: 3.4,
+					updatedAt: '2026-09-24 14:00:08'
+				},
+				iv: 0.23906249999999998,
+				delta: -0.011992934638715536
+			},
+			entryDelta: -0.011992934638715536,
+			entryTransaction: 'BUY',
+			reqMargin: 224.25,
+			qty: 65,
+			ordersCount: undefined,
+			charges: undefined,
+			npfPoints: undefined,
+			postChargesNpf: undefined
+		},
+		totalCharges: 0,
+		postChargesPnl: 0,
+		candleHighToCloseRatio: 0.25710621927762883,
+		candleLowToOpenRatio: 0.7428937807223711,
+		candleHighLowRatio: 1.0101505553627212
+	}
+}
