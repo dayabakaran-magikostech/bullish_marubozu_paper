@@ -55,6 +55,21 @@ class Database {
                 throw new Error(`Master spreadsheet config read failed for "${this.sheetName}": ${error.message}`);
             }
         };
+        this.readOrderLogs = async () => {
+            try {
+                const sheetData = await (0, crud_1.crudOperation)(this.url, this.sheetName, {
+                    actionType: "read",
+                    extraParams: {
+                        filters: [{ filterType: "none" }]
+                    }
+                });
+                return sheetData;
+            }
+            catch (error) {
+                console.error(`[Order Logs] Failed to fetch sheet "${this.sheetName}"`, error);
+                throw new Error(`Order Logs read failed for "${this.sheetName}": ${error.message}`);
+            }
+        };
         this.url = url;
         this.sheetName = sheetName;
     }

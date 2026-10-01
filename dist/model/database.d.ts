@@ -1,4 +1,5 @@
 import { instrumentsMaster, ApiAccessToken, KiteApiToken, AccountDataSheet, IndexConfig } from "../types/sheets";
+import { placeOrderData } from "../types/logger";
 export declare class Database {
     private readonly url;
     private readonly sheetName;
@@ -11,5 +12,6 @@ export declare class Database {
     readKiteToken: () => Promise<KiteApiToken[]>;
     readIndexConfig: () => Promise<IndexConfig[]>;
     private transformAccountPriority;
+    readOrderLogs: () => Promise<placeOrderData[]>;
 }
 //# sourceMappingURL=database.d.ts.map

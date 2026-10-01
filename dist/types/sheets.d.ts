@@ -34,6 +34,10 @@ export interface IndexConfig {
     instrumentToken: number;
     hasWeekly: boolean;
     currentWeekly: string;
+    exch: string;
+    exchSegment: string;
+    xtsExchSegment: string;
+    marginPerLot: number;
     dte: number;
 }
 export interface RawIndexConfigRow {
@@ -46,6 +50,10 @@ export interface RawIndexConfigRow {
     instrumentToken: number;
     hasWeekly: boolean;
     currentWeekly: string;
+    exch: string;
+    exchSegment: string;
+    xtsExchSegment: string;
+    marginPerLot: number;
     dte: number;
 }
 export interface RawAccountRow {

@@ -19,7 +19,7 @@ async function crudOperation(url, sName, payload) {
                 s_name: sName,
                 data: payload.data,
                 id: payload.extraParams.id,
-                colName: payload.extraParams.colName,
+                col_name: payload.extraParams.col_name,
             };
             break;
         case 'batchUpdate':

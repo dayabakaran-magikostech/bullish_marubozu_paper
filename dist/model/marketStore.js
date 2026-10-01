@@ -38,6 +38,10 @@ class MarketStore {
                     hasWeekly: row.hasWeekly,
                     currentWeekly: (0, helper_1.normalizeDate)(row.currentWeekly),
                     active: row.active,
+                    exch: row.exch,
+                    exchSegment: row.exchSegment,
+                    xtsExchSegment: row.xtsExchSegment,
+                    marginPerLot: Number(row.marginPerLot),
                     dte: Number(row.dte)
                 },
                 currentIndexQuote: {
@@ -142,6 +146,7 @@ class MarketStore {
     sortStrikesArr() {
         for (const indexData of Object.values(this.indexes)) {
             indexData.strikesArr = [...new Set(indexData.strikesArr)].sort((a, b) => a - b);
+            indexData.optionChain = Object.fromEntries(Object.entries(indexData.optionChain).sort(([keyA], [keyB]) => keyA.localeCompare(keyB)));
         }
     }
 }

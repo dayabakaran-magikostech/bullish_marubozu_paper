@@ -1,4 +1,5 @@
 import { OptionInstrument } from "./market";
+import { OrderLeg } from "./orderHandler";
 export type OrderStatus = "entrySent" | "entered" | "exitSent" | "exited";
 export type TradeDirection = "BUY" | "SELL";
 export type PositionAction = 'ENTRY' | 'EXIT';
@@ -15,7 +16,6 @@ export interface TradeData {
     entryTransaction: TradeDirection;
     reqMargin?: number;
     qty?: number;
-    ordersCount?: number;
     charges?: number;
     npfPoints?: number;
     postChargesNpf?: number;
@@ -36,5 +36,23 @@ export interface ActiveTradeData {
     candleHighToCloseRatio: number;
     candleLowToOpenRatio: number;
     candleHighLowRatio: number;
+    entrySynthFut: number;
+    entryPrimaryIv: number;
+    entryCoverIv: number;
+    theoreticalThetaPerQty: number;
+    theoreticalTheta: number;
+    theroreticalPrimaryTheta: number;
+    theoreticalCoverTheta: number;
+    theoreticalThetaPnl: number;
+    gap: number;
+    hwm: number;
+}
+export interface OrderObj {
+    cover: Record<string, Partial<OrderLeg>>;
+    primary: Record<string, Partial<OrderLeg>>;
+    margin: {
+        cash: number;
+        total: number;
+    };
 }
 //# sourceMappingURL=trade.d.ts.map

@@ -24,4 +24,5 @@ export declare function getImpliedVolatility(expectedCost: number, s: number, k:
  * @returns The delta of the option
  */
 export declare function getDelta(s: number, k: number, t: number, v: number, r: number, callPut: string): number;
+export declare function calculateTheoreticalValues(synthFut: number, strike: number, iv: number, dte: number): [number, number];
 //# sourceMappingURL=optionGreeksCalculator.d.ts.map

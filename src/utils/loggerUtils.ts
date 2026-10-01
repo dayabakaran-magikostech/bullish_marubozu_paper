@@ -49,6 +49,10 @@ export function fromattedTradeData(trade: ActiveTradeData): placeOrderData[] {
 		candleHighToCloseRatio: trade.candleHighToCloseRatio,
 		candleLowToOpenRatio: trade.candleLowToOpenRatio,
 		candleHighLowRatio: trade.candleHighLowRatio,
+		entrySynthFut: "",
+		entryPrimaryIv: "",
+		entryCoverIv: "",
+		exitReason: ""
 	};
 
 	formattedData.push(tradeObj);

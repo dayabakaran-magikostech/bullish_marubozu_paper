@@ -1,4 +1,10 @@
 import { OrderStatus, TradeDirection } from "./trade";
+export interface LoggerVMData {
+    bot: string | undefined;
+    filename: string;
+    data: any[];
+    type: 'create_file' | 'add_log';
+}
 export interface placeOrderData {
     orderTag: string;
     entryTime: string;
@@ -10,24 +16,28 @@ export interface placeOrderData {
     orderStatus: OrderStatus;
     primarySentEntryPrice: number;
     primaryExecutedEntryPrice: number | undefined;
-    primarySentExitPrice: number | undefined;
-    primaryExecutedExitPrice: number | undefined;
+    primarySentExitPrice: number | undefined | '';
+    primaryExecutedExitPrice: number | undefined | '';
     primaryEntryOrdersCount: number | undefined;
-    primaryExitOrdersCount: number | undefined;
+    primaryExitOrdersCount: number | undefined | '';
     primaryInstrumentToken: number;
     primaryExchangeToken: number;
+    primaryOptionType: string;
+    primaryStrike: number;
     primaryTradingSymbol: string;
     primaryEntryDelta: number;
     primaryEntryTransaction: TradeDirection;
     primaryReqMargin: number;
     coverSentEntryPrice: number | undefined;
     coverExecutedEntryPrice: number | undefined;
-    coverSentExitPrice: number | undefined;
-    coverExecutedExitPrice: number | undefined;
+    coverSentExitPrice: number | undefined | '';
+    coverExecutedExitPrice: number | undefined | '';
     coverEntryOrdersCount: number | undefined;
-    coverExitOrdersCount: number | undefined;
+    coverExitOrdersCount: number | undefined | '';
     coverInstrumentToken: number;
     coverExchangeToken: number;
+    coverOptionType: string;
+    coverStrike: number;
     coverTradingSymbol: string;
     coverEntryDelta: number;
     coverEntryTransaction: TradeDirection;
@@ -39,5 +49,26 @@ export interface placeOrderData {
     candleHighToCloseRatio: number;
     candleLowToOpenRatio: number;
     candleHighLowRatio: number;
+    entrySynthFut: number | undefined | "";
+    entryPrimaryIv: number | undefined | "";
+    entryCoverIv: number | undefined | "";
+    exitReason: number | undefined | "";
+}
+export interface pnlOrderData {
+    orderTag: string;
+    dateime: string;
+    entryTime: string;
+    qty: number;
+    primaryTradingSymbol: string;
+    primaryEntryPrice: number;
+    primaryCurrentPrice: number;
+    coverTradingSymbol: string;
+    coverEntryPrice: number;
+    coverCurrentPrice: number;
+    primaryPreChargesPnl: number;
+    coverPreChargesPnl: number;
+    primaryCharges: number;
+    coverCharges: number;
+    totalPnl: number;
 }
 //# sourceMappingURL=logger.d.ts.map

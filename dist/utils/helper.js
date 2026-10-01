@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.delay = void 0;
 exports.buildKiteQuoteUrls = buildKiteQuoteUrls;
 exports.buildKiteAuthHeaders = buildKiteAuthHeaders;
 exports.getDaysRem = getDaysRem;
@@ -14,7 +15,9 @@ exports.getOptionPrice = getOptionPrice;
 exports.getNearestPutDeltaOption = getNearestPutDeltaOption;
 exports.getCurrTimeStamp = getCurrTimeStamp;
 exports.getOrderTagDateSuffix = getOrderTagDateSuffix;
+exports.calcCharges = calcCharges;
 const config_1 = require("../config");
+const charges_1 = require("./charges");
 function buildKiteQuoteUrls(instruments, batchSize = 490) {
     if (!instruments.length) {
         throw new Error("[buildKiteQuoteUrls] Instrument list is empty.");
@@ -127,9 +130,9 @@ function getOptionPrice(option) {
     const bid = option.quote.bid;
     const offer = option.quote.offer;
     const ltp = option.quote.ltp;
-    return bid;
+    return (bid + offer) / 2;
 }
-function getNearestPutDeltaOption(index, targetDelta) {
+function getNearestPutDeltaOption(index, targetDelta, synthAtmStrike) {
     const indexData = config_1.marketStore.indexes[index.trim().toUpperCase()];
     if (!indexData)
         return null;
@@ -144,6 +147,9 @@ function getNearestPutDeltaOption(index, targetDelta) {
         if (distance < nearestDistance) {
             nearestDistance = distance;
             nearest = pe;
+        }
+        if (strike.strikePrice > synthAtmStrike) {
+            break;
         }
     }
     return nearest;
@@ -176,4 +182,11 @@ function getOrderTagDateSuffix(datetime) {
     const mm = datetime.slice(14, 16);
     return `${dd}${month}${yy}${hh}${mm}`;
 }
+function calcCharges(entryPrice, exitPrice, qty, numOrdersEnetred, numOrdersExited, type, entryTransaction) {
+    const exitTransaction = entryTransaction.toLowerCase() == "sell" ? 'buy' : 'sell';
+    return ((0, charges_1.getCharges)('equity', type, 'ZERODHA', entryTransaction, entryPrice, qty, numOrdersEnetred) +
+        (0, charges_1.getCharges)('equity', type, 'ZERODHA', exitTransaction, exitPrice, qty, numOrdersExited));
+}
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+exports.delay = delay;
 //# sourceMappingURL=helper.js.map

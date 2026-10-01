@@ -8,5 +8,10 @@ export declare const ENV: {
     readonly masterSpreadSheetConfigSheetName: string;
     readonly kiteWsAcc: string;
     readonly orderLogsSheet: string;
+    readonly loggerVmUrl: string;
+    readonly botTag: string;
+    readonly orderHandlerWsUrl: string;
+    readonly chatWebhookUrl: string;
+    readonly pnlLogsSheetName: string;
 };
 //# sourceMappingURL=env.d.ts.map

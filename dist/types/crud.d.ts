@@ -21,7 +21,7 @@ export type crudPayload = {
     data: Record<string, unknown>;
     extraParams: {
         id: string;
-        colName: string;
+        col_name: string;
     };
 } | {
     actionType: "batchUpdate";
@@ -43,7 +43,7 @@ export type apiRequestBody = (baseRequest & {
     type: "update";
     data: Record<string, unknown>;
     id: string;
-    colName: string;
+    col_name: string;
 }) | (baseRequest & {
     type: "batchUpdate";
     data: Record<string, Record<string, unknown>>;

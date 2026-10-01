@@ -1,6 +1,6 @@
 import { TradeDirection, PositionAction } from "./trade";
-type Exchange = 'NSE' | 'BSE' | 'NFO';
-type ExchangeXTS = 'NSECM' | 'BSECM' | 'NSEFO';
+export type Exchange = 'NSE' | 'BSE' | 'NFO';
+export type ExchangeXTS = 'NSECM' | 'BSECM' | 'NSEFO';
 /** A single child order’s execution info */
 type ChildExecution = {
     status: string;
@@ -50,6 +50,32 @@ export type OrderRequest = {
     accounts: string[];
     cover_orders: OrderLeg | {};
     primary_orders: OrderLeg | {};
+    [key: string | number | symbol]: any;
+};
+export type BasketOrders = {
+    basket_status?: string;
+} & Record<Exclude<string, 'basket_status'>, OrderLeg>;
+export type OrderHandlerResponseData = {
+    type: string;
+    status: boolean;
+    message: string;
+    tag?: string;
+    orders_placed_counter?: number;
+    rejectedOrders?: string[];
+    margins_required?: MarginDetails;
+    accounts?: string[];
+    entryExitType?: PositionAction;
+    price_efficiency?: boolean;
+    volume_efficiency?: boolean;
+    filtered_accounts?: string[];
+    order_status?: string;
+    traded_account?: string;
+    bot_tag?: string;
+    completed_timestamp?: string;
+    timestamp?: string;
+    rejectedAfterPlacing?: string[];
+    cover_orders?: BasketOrders;
+    primary_orders?: BasketOrders;
     [key: string | number | symbol]: any;
 };
 export {};
