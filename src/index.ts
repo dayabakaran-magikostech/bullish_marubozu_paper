@@ -71,6 +71,8 @@ export async function runDecisionEngine(): Promise<any> {
 		else {
 			console.log("No opportunity exists");
 		}
+
+		// pingCurrentOrdersPnl();
 	}
 	catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -119,9 +121,8 @@ function evaluateEntrySignals(open: number, high: number, low: number, close: nu
 	// console.log("Current high: ", high, "\nCurrent low: ", low, "\nCurrent open: ", open, "\nCurrent close: ", close)
 	console.log("Delta deviation threshold:", deltaDeviationThreshold, "\nDelta deviation: ", deltaDeviation, "\nOpen from low ratio: ", openFromLowRatio, "\nClose from high ratio: ", closeFromHighRatio);
 	console.log("Opportunity exists: ", opportunityExists);
-	const message = "Delta deviation threshold: " + deltaDeviationThreshold + "\nDelta deviation: " + deltaDeviation + "\nOpen from low ratio: " + openFromLowRatio + "\nClose from high ratio: " + closeFromHighRatio;
+	const message = "\nDelta deviation threshold: " + Number(deltaDeviationThreshold.toFixed(4)) + "\nDelta deviation: " + Number(deltaDeviation.toFixed(4)) + "\nUpper wick: " + Number((openFromLowRatio * 100).toFixed(2)) + " %\nLower wick: " + Number((closeFromHighRatio * 100).toFixed(2)) + " %" + "\nOpportunity exists: " + opportunityExists;
 	notificationHandler(message, { module: 'evaluateEntrySignals', severity: 'Low' }, true);
-	notificationHandler("Opportunity exists" + opportunityExists, { module: 'evaluateEntrySignals', severity: 'Low' }, true);
 	return { opportunityExists, targetDelta, closeFromHighRatio, openFromLowRatio, highToLowRatio };
 }
 
@@ -201,5 +202,32 @@ async function updateOptionsPricesAndCalculateGreeks(): Promise<updateOptionsPri
 		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 		notificationHandler(errorMessage, { module: 'updateOptionsPricesAndCalculateGreeks', severity: 'High' }, true);
 		return result;
+	}
+}
+
+export function pingCurrentOrdersPnl() {
+	try {
+		let activeOrdersCounter = 0;
+		let totalPnl = 0;
+		let totalMargin = 0;
+		for (const orderTag in orderTracker) {
+			const order = orderTracker[orderTag];
+			const tradeActiveMark = order?.trade?.active;
+			const postChargesPnl = order?.trade?.postChargesPnl;
+			const marginUsed = order?.trade?.marginRequired;
+			if (tradeActiveMark) {
+				activeOrdersCounter += 1;
+				totalPnl += postChargesPnl ?? 0;
+				totalMargin += marginUsed ?? 0;
+			}
+		}
+
+		if (activeOrdersCounter > 0) {
+			const pnlMessage = "\nTotal orders: " + activeOrdersCounter + "\nTotal margin used: " + totalMargin + "\nTotal PNL: " + totalPnl;
+			notificationHandler(pnlMessage, { module: 'PNL Logger', severity: 'High' }, true);
+		}
+	}
+	catch (error) {
+		console.log("Error in pingCurrentOrdersPnl():\n", error);
 	}
 }

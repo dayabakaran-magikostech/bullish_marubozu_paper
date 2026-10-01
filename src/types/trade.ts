@@ -48,6 +48,7 @@ export interface ActiveTradeData {
 	theroreticalPrimaryTheta: number;
 	theoreticalCoverTheta: number;
 	theoreticalThetaPnl: number;
+	marginRequired: number;
 	gap: number;
 	hwm: number;
 }

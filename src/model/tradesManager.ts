@@ -111,6 +111,7 @@ export class TradeManager {
 			theoreticalTheta: 0,
 			gap: 0,
 			hwm: -Infinity,
+			marginRequired: 0,
 		};
 
 		this.trade = tradeTrackerObj;
@@ -265,6 +266,7 @@ export class TradeManager {
 
 				orderData.margin.cash = buyMarginReq;
 				orderData.margin.total = (marginPerLot * lotsToBuy);
+				data.marginRequired = orderData.margin.total;
 			}
 			else {
 
@@ -405,17 +407,17 @@ export class TradeManager {
 				activeTrade.orderStatus = "entered";
 				activeTrade.active = true;
 				console.log("Order successfully entered: ", tag);
-				const message = "Entered Order: " + tag + "\n" + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.primaryOrderData.qty;
-				notificationHandler(message, { module: 'onOrderCompletion', severity: 'High' }, true);
+				const message = "\nEntered Order: " + tag + "\nPrimary: " + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\nCover: " + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\nMargin Used: " + activeTrade.marginRequired + "\nQty: " + activeTrade.primaryOrderData.qty + "\nTrading Acc: " + activeTrade.account;
+				notificationHandler(message, { module: 'Entry Order', severity: 'High' }, true);
 				const isGreeksStored = await calculateAndStoreEntryGreeks(tag!);
 				if (!isGreeksStored) {
 					notificationHandler('Failed to calculated entry level greeks', { module: 'onOrderCompletion', severity: 'High' }, true);
 				}
-				const { entrySynthFut, entryPrimaryIv, entryCoverIv } = activeTrade;
+				const { entrySynthFut, entryPrimaryIv, entryCoverIv, marginRequired } = activeTrade;
 				const res = await updateEntryDetailsOnSheet(
 					tradedAccount, primaryAvgPrice, primaryNumOrders,
 					coverAvgPrice, coverNumOrders, tag!,
-					entrySynthFut, entryPrimaryIv, entryCoverIv
+					entrySynthFut, entryPrimaryIv, entryCoverIv, marginRequired
 				);
 				if (res == true) {
 					console.log("Order completion data updated on the sheet");
@@ -438,8 +440,8 @@ export class TradeManager {
 				}
 
 				console.log("Order successfully exited: ", tag);
-				const message = "Exited Order: " + tag + "\n" + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.primaryOrderData.qty;
-				notificationHandler(message, { module: 'onOrderCompletion', severity: 'High' }, true);
+				const message = "\nExited Order: " + tag + "\nPrimary: " + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\nCover: " + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\nQty: " + activeTrade.primaryOrderData.qty + "\nPnl: " + (pnlObj.totalPnl.toFixed(2));
+				notificationHandler(message, { module: 'Exit Order', severity: 'High' }, true);
 				const res = await updateExitDetailsOnSheet(
 					tag!,
 					getCurrTimeStamp(new Date()),
@@ -636,6 +638,7 @@ export class TradeManager {
 				theoreticalTheta: 0,
 				gap: 0,
 				hwm: -Infinity,
+				marginRequired: 0,
 			};
 
 			this.trade = restoredTrade;

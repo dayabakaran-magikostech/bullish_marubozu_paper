@@ -32,9 +32,10 @@ export const globalStates = {
     deltaAdjustment: 0.05,
     deltaChangeFactorK: 1.0065,
     coverDeltaTarget: 0.01,
-    candleWickThreshold: 0.3, // 0.3
+    candleWickThreshold: 1, // 0.3
     mainProcessInterval: null as NodeJS.Timeout | null,
     pnlLoggingInterval: null as NodeJS.Timeout | null,
+    pnlPingInterval: null as NodeJS.Timeout | null,
     lotsToTrade: 5,
     socket: io(ENV.loggerVmUrl),
     priceEfficiency: true,

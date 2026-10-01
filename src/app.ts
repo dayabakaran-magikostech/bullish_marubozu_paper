@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import { ENV } from "./config/env";
 import { initializeTheBot } from "./initialization";
 import { marketStore, globalStates, generalConfig, instrumentStates, orderTracker } from "./config";
-import { runDecisionEngine } from "./index";
+import { runDecisionEngine, pingCurrentOrdersPnl } from "./index";
 import cron from 'node-cron';
 import { orderHandler } from "./model/orderHandler";
 import { logActiveOrdersPnl } from "./logger";
@@ -32,16 +32,17 @@ app.get("/getInstrumentsState", async (req: Request, res: Response) => {
 
 app.listen(PORT, async () => {
 	console.log(`Server running on port ${PORT}`);
-	// await orderHandler.connect();
+	await orderHandler.connect();
 
 
 	// notificationHandler('instrumentes sheet data is empty', { module: 'initializeTheBot', severity: 'High' }, true);
 
-	await initializeTheBot();
+	// await initializeTheBot();
 	// await runDecisionEngine();
 
 	// await delay(15000);
 	// globalStates.pnlLoggingInterval = setInterval(logActiveOrdersPnl, generalConfig.pnlLoggingFreq);
+	// globalStates.pnlPingInterval = setInterval(pingCurrentOrdersPnl, generalConfig.pnlLoggingFreq);
 });
 
 
@@ -61,6 +62,7 @@ cron.schedule(
 		globalStates.marketOpen = true;
 		await runDecisionEngine();
 		globalStates.mainProcessInterval = setInterval(runDecisionEngine, generalConfig.mainProcessFreq);
+		globalStates.pnlPingInterval = setInterval(pingCurrentOrdersPnl, generalConfig.pnlLoggingFreq);
 		// pnl -> 1 min
 		// opp check -> 1 hour
 	},
@@ -79,7 +81,7 @@ cron.schedule(
 )
 
 cron.schedule(
-	'00 20 15 * * 1-5',
+	'00 40 15 * * 1-5',
 	async function () {
 		console.log('Stopping the bot: ' + getCurrTimeStamp(new Date));
 		globalStates.pnlLoggingInterval = null;

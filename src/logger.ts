@@ -7,6 +7,7 @@ import { pnlLogsHeader } from "./utils/schema";
 import { isOlderThanMinutes } from "./utils/helper";
 import { calculateTheoreticalTheta } from "./model/tradesManager";
 import { updateInstrumentPrices } from "./services/instrumentPricesUpdator";
+import { notificationHandler } from "./utils/notificationsHandler";
 
 export function createLogFilesOnLoggerVM(): boolean {
 	const pnlData: LoggerVMData = {
@@ -24,7 +25,7 @@ export async function updateEntryDetailsOnSheet(
 	tradedAccount: string, primaryExecutedEntryPrice: number,
 	primaryEntryOrdersCount: number, coverExecutedEntryPrice: number,
 	coverEntryOrdersCount: number, tag: string, entrySynthFut: number,
-	entryPrimaryIv: number, entryCoverIv: number
+	entryPrimaryIv: number, entryCoverIv: number, primaryReqMargin: number
 ): Promise<boolean> {
 
 	const dataUpdationObj = {
@@ -36,7 +37,8 @@ export async function updateEntryDetailsOnSheet(
 		coverEntryOrdersCount: coverEntryOrdersCount,
 		entrySynthFut,
 		entryPrimaryIv,
-		entryCoverIv
+		entryCoverIv,
+		primaryReqMargin
 	}
 
 	const crudRes = await crudOperation(
@@ -64,7 +66,7 @@ export async function updateExitDetailsOnSheet(
 	coverExecutedExitPrice: number,
 	coverExitOrdersCount: number,
 	postChargesPnl: number,
-	totalCharges: number,
+	totalCharges: number
 ): Promise<boolean> {
 
 	const dataUpdationObj = {
@@ -77,7 +79,7 @@ export async function updateExitDetailsOnSheet(
 		coverExecutedExitPrice,
 		coverExitOrdersCount,
 		postChargesPnl,
-		totalCharges,
+		totalCharges
 	}
 
 	const crudRes = await crudOperation(
@@ -105,9 +107,9 @@ export async function logEntryOrderToDB(trade: ActiveTradeData): Promise<any> {
 	}
 }
 
-export async function logPnlToDB(tradeData: any): Promise<any> {
+export async function logPnlToDB(pnlData: any): Promise<any> {
 	try {
-		const crudRes = await crudOperation(ENV.liveBotDbUrl, ENV.pnlLogsSheetName, { actionType: "create", data: tradeData as any });
+		const crudRes = await crudOperation(ENV.liveBotDbUrl, ENV.pnlLogsSheetName, { actionType: "create", data: pnlData as any });
 		return crudRes;
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -129,6 +131,9 @@ export async function logActiveOrdersPnl() {
 		}
 
 		const ordersPnlDataArr = [];
+		let activeOrdersCounter = 0;
+		let totalPnl = 0;
+
 		for (const orderTag in orderTracker) {
 			const order = orderTracker[orderTag];
 			// console.dir(order, { depth: null });
@@ -146,6 +151,8 @@ export async function logActiveOrdersPnl() {
 				globalStates.socket.emit('data', dataObj);
 				console.log("PnL Data for order: ", orderTag, pnlData);
 				const posPnl = pnlData.totalPnl;
+				activeOrdersCounter += 1;
+				totalPnl += posPnl;
 
 				// if quote fails for theta pnl, let it add previous available values - but dont calc gap just store the values
 
@@ -164,13 +171,12 @@ export async function logActiveOrdersPnl() {
 					order.trade.hwm = gap;
 					hwm = gap;
 				}
-
 				if (isOlderThanMinutes(entryTime, tradeConfig.graceMinutes)) {
 					// check hard stop condition -> and exit
 					const hardStop = tradeConfig.hardStop * qty! * -1;
 					const trailStop = tradeConfig.trailStop * qty!;
-
-					if (gap < hardStop) {
+					// if (gap < hardStop) {
+					if (gap < 0) {
 						// if (gap < 0) {
 						console.log("Gap < hardstop");
 						order.trade.orderStatus = "exitSent";
@@ -188,7 +194,6 @@ export async function logActiveOrdersPnl() {
 				}
 
 				const nextTheoreticalTheta = calculateTheoreticalTheta(orderTag);
-
 				const pnlObj = {
 					orderTag,
 					theoreticalThetaPnl: nextTheoreticalTheta,
@@ -197,7 +202,7 @@ export async function logActiveOrdersPnl() {
 					hwm
 				}
 
-				ordersPnlDataArr.push([pnlObj]);
+				ordersPnlDataArr.push(pnlObj);
 			}
 		}
 
