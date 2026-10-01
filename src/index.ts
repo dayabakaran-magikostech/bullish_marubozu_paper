@@ -119,6 +119,9 @@ function evaluateEntrySignals(open: number, high: number, low: number, close: nu
 	// console.log("Current high: ", high, "\nCurrent low: ", low, "\nCurrent open: ", open, "\nCurrent close: ", close)
 	console.log("Delta deviation threshold:", deltaDeviationThreshold, "\nDelta deviation: ", deltaDeviation, "\nOpen from low ratio: ", openFromLowRatio, "\nClose from high ratio: ", closeFromHighRatio);
 	console.log("Opportunity exists: ", opportunityExists);
+	const message = "Delta deviation threshold: " + deltaDeviationThreshold + "\nDelta deviation: " + deltaDeviation + "\nOpen from low ratio: " + openFromLowRatio + "\nClose from high ratio: " + closeFromHighRatio;
+	notificationHandler(message, { module: 'evaluateEntrySignals', severity: 'Low' }, true);
+	notificationHandler("Opportunity exists" + opportunityExists, { module: 'evaluateEntrySignals', severity: 'Low' }, true);
 	return { opportunityExists, targetDelta, closeFromHighRatio, openFromLowRatio, highToLowRatio };
 }
 

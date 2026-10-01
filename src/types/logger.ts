@@ -51,6 +51,10 @@ export interface placeOrderData {
 	candleHighToCloseRatio: number;
 	candleLowToOpenRatio: number;
 	candleHighLowRatio: number;
+	entrySynthFut: number | undefined | "";
+	entryPrimaryIv: number | undefined | "";
+	entryCoverIv: number | undefined | "";
+	exitReason: number | undefined | "";
 }
 
 export interface pnlOrderData {

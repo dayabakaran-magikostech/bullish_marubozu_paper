@@ -6,7 +6,7 @@ import {
     OptionQuoteUpdate, OptionType, StoreIndexHourlyQuoteInput
 } from "../types/market"; //MarketStore
 
-export { instrumentsSheet, kiteSheet, apiAccessTokenSheet, masterSpreadsheetConfigSheet } from "./databases";
+export { instrumentsSheet, kiteSheet, apiAccessTokenSheet, masterSpreadsheetConfigSheet, orderLogsSheet } from "./databases";
 import { MarketStore } from "../model/marketStore";
 import { TradeManager } from "../model/tradesManager";
 import { io } from 'socket.io-client';

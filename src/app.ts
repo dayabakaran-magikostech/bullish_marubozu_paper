@@ -32,12 +32,12 @@ app.get("/getInstrumentsState", async (req: Request, res: Response) => {
 
 app.listen(PORT, async () => {
 	console.log(`Server running on port ${PORT}`);
-	await orderHandler.connect();
+	// await orderHandler.connect();
 
 
 	// notificationHandler('instrumentes sheet data is empty', { module: 'initializeTheBot', severity: 'High' }, true);
 
-	// await initializeTheBot();
+	await initializeTheBot();
 	// await runDecisionEngine();
 
 	// await delay(15000);
@@ -87,5 +87,6 @@ cron.schedule(
 	}
 )
 
-//stop bot after 3:35
-//
+// stop bot after 3:35 - for exits
+// pnl and theoretical pnl till 3:40
+// last entry - 3:15

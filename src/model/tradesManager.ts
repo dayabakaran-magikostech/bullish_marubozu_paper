@@ -155,6 +155,8 @@ export class TradeManager {
 		// fix hardcoded 1, 1 in charges function
 		const coverCharges = calcCharges(coverExecutedEntry, coverExitPrice, qty, 1, 1, coverInstrumentData.type?.toLowerCase() as Type, coverTransaction?.toLowerCase() as TransactionType);
 		const totalPnl = ((primaryPnl + coverPnl) - (primaryCharges + coverCharges));
+		this.trade.postChargesPnl = totalPnl;
+		this.trade.totalCharges = (primaryCharges + coverCharges);
 
 		const pnlObj = {
 			orderTag: this.trade.orderTag,
@@ -403,11 +405,18 @@ export class TradeManager {
 				activeTrade.orderStatus = "entered";
 				activeTrade.active = true;
 				console.log("Order successfully entered: ", tag);
+				const message = "Entered Order: " + tag + "\n" + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.primaryOrderData.qty;
+				notificationHandler(message, { module: 'onOrderCompletion', severity: 'High' }, true);
 				const isGreeksStored = await calculateAndStoreEntryGreeks(tag!);
 				if (!isGreeksStored) {
 					notificationHandler('Failed to calculated entry level greeks', { module: 'onOrderCompletion', severity: 'High' }, true);
 				}
-				const res = await updateEntryDetailsOnSheet(tradedAccount, primaryAvgPrice, primaryNumOrders, coverAvgPrice, coverNumOrders, tag!);
+				const { entrySynthFut, entryPrimaryIv, entryCoverIv } = activeTrade;
+				const res = await updateEntryDetailsOnSheet(
+					tradedAccount, primaryAvgPrice, primaryNumOrders,
+					coverAvgPrice, coverNumOrders, tag!,
+					entrySynthFut, entryPrimaryIv, entryCoverIv
+				);
 				if (res == true) {
 					console.log("Order completion data updated on the sheet");
 				}
@@ -429,6 +438,8 @@ export class TradeManager {
 				}
 
 				console.log("Order successfully exited: ", tag);
+				const message = "Exited Order: " + tag + "\n" + activeTrade.primaryOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.coverOrderData.instrumentData?.tradingSymbol + "\n" + activeTrade.primaryOrderData.qty;
+				notificationHandler(message, { module: 'onOrderCompletion', severity: 'High' }, true);
 				const res = await updateExitDetailsOnSheet(
 					tag!,
 					getCurrTimeStamp(new Date()),
@@ -528,40 +539,41 @@ export class TradeManager {
 		return exitOrderRes;
 	}
 
-	public loadTradeFromStoredData(
-		headers: string[],
-		row: any[]
-	): boolean {
+	public loadTradeFromDb(stored: any): boolean {
 		try {
-			const stored = this.rowToObject(headers, row);
+			if (!stored) {
+				throw new Error("Stored trade data is missing");
+			}
 			const orderTag = String(stored.orderTag ?? "");
 			if (!orderTag) {
-				throw new Error("orderTag missing from stored trade");
+				throw new Error("orderTag is missing");
 			}
+
+			const orderStatus = String(stored.orderStatus) as ActiveTradeData["orderStatus"];
+			const isActive = orderStatus === "entered";
+
+			if (!isActive) {
+				console.log(orderTag + " is not active skipping the trade");
+				return false;
+			}
+
 			const primaryInstrumentToken = Number(stored.primaryInstrumentToken);
 			const coverInstrumentToken = Number(stored.coverInstrumentToken);
 			if (!primaryInstrumentToken || !coverInstrumentToken) {
-				throw new Error(
-					`Instrument tokens missing for stored trade ${orderTag}`
-				);
+				throw new Error(`Instrument tokens missing for trade ${orderTag}`);
 			}
 			const primaryInstrumentData = instrumentStates[primaryInstrumentToken];
 			const coverInstrumentData = instrumentStates[coverInstrumentToken];
 			if (!primaryInstrumentData) {
-				throw new Error(
-					`Primary instrument ${primaryInstrumentToken} not found in instrumentStates`
-				);
+				throw new Error(`Primary instrument not found in instrumentStates: ${primaryInstrumentToken}`);
 			}
+
 			if (!coverInstrumentData) {
-				throw new Error(
-					`Cover instrument ${coverInstrumentToken} not found in instrumentStates`
-				);
+				throw new Error(`Cover instrument not found in instrumentStates: ${coverInstrumentToken}`);
 			}
 			const qty = Number(stored.qty);
-			if (!qty || qty <= 0) {
-				throw new Error(
-					`Invalid qty for stored trade ${orderTag}: ${stored.qty}`
-				);
+			if (!Number.isFinite(qty) || qty <= 0) {
+				throw new Error(`Invalid qty for trade ${orderTag}: ${stored.qty}`);
 			}
 
 			const primaryTradeData: TradeData = {
@@ -598,15 +610,15 @@ export class TradeManager {
 				postChargesNpf: undefined,
 			};
 
-			const trade: ActiveTradeData = {
+			const restoredTrade: ActiveTradeData = {
 				orderTag,
 				entryTime: String(stored.entryTime ?? ""),
 				exitTime: String(stored.exitTime ?? ""),
 				index: String(stored.index),
 				account: String(stored.account ?? ""),
 				expiry: String(stored.expiry),
-				active: this.toBoolean(stored.active),
-				orderStatus: stored.orderStatus as ActiveTradeData["orderStatus"],
+				active: isActive,
+				orderStatus,
 				primaryOrderData: primaryTradeData,
 				coverOrderData: coverTradeData,
 				totalCharges: this.toOptionalNumber(stored.totalCharges) ?? 0,
@@ -614,78 +626,40 @@ export class TradeManager {
 				candleHighToCloseRatio: this.toOptionalNumber(stored.candleHighToCloseRatio) ?? 0,
 				candleLowToOpenRatio: this.toOptionalNumber(stored.candleLowToOpenRatio) ?? 0,
 				candleHighLowRatio: this.toOptionalNumber(stored.candleHighLowRatio) ?? 0,
-				/*
-				 * These are NOT currently present in your stored table.
-				 * They can either:
-				 *
-				 * 1. be recalculated after loading
-				 * 2. be added to DB
-				 * 3. temporarily start at 0
-				 */
-				entrySynthFut: 0,
-				entryPrimaryIv: 0,
-				entryCoverIv: 0,
+				entrySynthFut: this.toOptionalNumber(stored.entrySynthFut) ?? 0,
+				entryPrimaryIv: this.toOptionalNumber(stored.entryPrimaryIv) ?? 0,
+				entryCoverIv: this.toOptionalNumber(stored.entryCoverIv) ?? 0,
 				theoreticalThetaPerQty: 0,
 				theroreticalPrimaryTheta: 0,
 				theoreticalCoverTheta: 0,
 				theoreticalThetaPnl: 0,
 				theoreticalTheta: 0,
 				gap: 0,
-
-				/*
-				 * HWM should generally be recalculated if you're resuming
-				 * an active trade.
-				 */
 				hwm: -Infinity,
 			};
 
-			this.trade = trade;
+			this.trade = restoredTrade;
 
-			console.log(
-				`Stored trade loaded successfully: ${orderTag}`,
-				{
-					status: trade.orderStatus,
-					active: trade.active,
-					account: trade.account,
-					qty,
-					primary: primaryInstrumentData.tradingSymbol,
-					cover: coverInstrumentData.tradingSymbol,
-				}
-			);
+			console.log(`Trade restored successfully: ${orderTag}`);
+
+			console.log({
+				orderTag,
+				orderStatus,
+				active: isActive,
+				account: restoredTrade.account,
+				qty,
+				primary: primaryInstrumentData.tradingSymbol,
+				cover: coverInstrumentData.tradingSymbol,
+				primaryEntryPrice: primaryTradeData.executedEntryPrice,
+				coverEntryPrice: coverTradeData.executedEntryPrice,
+			});
 
 			return true;
 		}
 		catch (error) {
-			console.error(
-				"Failed to load stored trade:",
-				error instanceof Error ? error.message : error
-			);
-
-			notificationHandler(
-				`Failed to load stored trade: ${error instanceof Error
-					? error.message
-					: "Unknown error"
-				}`,
-				{
-					module: "loadTradeFromStoredData",
-					severity: "High",
-				},
-				true
-			);
-
+			console.error("Failed to restore trade:", error instanceof Error ? error.message : error);
 			return false;
 		}
-	}
-
-	private rowToObject(
-		headers: string[],
-		row: any[]
-	): Record<string, any> {
-		const obj: Record<string, any> = {};
-		for (let i = 0; i < headers.length; i++) {
-			obj[headers[i]!] = row[i];
-		}
-		return obj;
 	}
 
 	private toOptionalNumber(value: any): number | undefined {
@@ -799,7 +773,7 @@ export function calculateTheoreticalTheta(orderTag: string): number {
 	const indexData = marketStore.indexes.NIFTY;
 	if (!indexData) {
 		console.log("IndexData is missing");
-		notificationHandler('IndexData is missing', { module: 'calculateAndStoreEntryGreeks', severity: 'High' }, true);
+		notificationHandler('IndexData is missing', { module: 'calculateTheoreticalTheta', severity: 'High' }, true);
 		throw new Error(`IndexData is missing`);
 	};
 	const currentWeeklyDte = indexData.config.dte;
@@ -811,8 +785,8 @@ export function calculateTheoreticalTheta(orderTag: string): number {
 
 	order!.theroreticalPrimaryTheta = primaryTheoreticalTheta;
 	order!.theoreticalCoverTheta = coverTheoreticalTheta;
-	order!.theoreticalThetaPerQty = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 375);
-	const theoreticalTheta = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 375) * (order?.primaryOrderData.qty!)
+	order!.theoreticalThetaPerQty = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 385);
+	const theoreticalTheta = (coverTheoreticalTheta - primaryTheoreticalTheta) * (1 / 385) * (order?.primaryOrderData.qty!)
 	order!.theoreticalTheta = theoreticalTheta;
 	order!.theoreticalThetaPnl += theoreticalTheta;
 

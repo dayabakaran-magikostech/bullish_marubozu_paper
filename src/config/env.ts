@@ -20,6 +20,7 @@ const loggerVmUrl = validateEnv(process.env.LOGGER_VM_URL, "LOGGER_VM_URL");
 const botTag = validateEnv(process.env.BOT_TAG, "BOT_TAG");
 const orderHandlerWsUrl = validateEnv(process.env.ORDER_HANDLER_WS_URL, "ORDER_HANDLER_WS_URL");
 const chatWebhookUrl = validateEnv(process.env.CHAT_WEBHOOK_URL, "CHAT_WEBHOOK_URL");
+const pnlLogsSheetName = validateEnv(process.env.PNL_LOGS_SHEET, "PNL_LOGS_SHEET");
 
 
 
@@ -37,5 +38,6 @@ export const ENV = {
     loggerVmUrl,
     botTag,
     orderHandlerWsUrl,
-    chatWebhookUrl
+    chatWebhookUrl,
+    pnlLogsSheetName
 } as const;

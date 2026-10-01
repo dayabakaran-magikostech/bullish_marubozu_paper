@@ -23,7 +23,8 @@ export function createLogFilesOnLoggerVM(): boolean {
 export async function updateEntryDetailsOnSheet(
 	tradedAccount: string, primaryExecutedEntryPrice: number,
 	primaryEntryOrdersCount: number, coverExecutedEntryPrice: number,
-	coverEntryOrdersCount: number, tag: string
+	coverEntryOrdersCount: number, tag: string, entrySynthFut: number,
+	entryPrimaryIv: number, entryCoverIv: number
 ): Promise<boolean> {
 
 	const dataUpdationObj = {
@@ -33,6 +34,9 @@ export async function updateEntryDetailsOnSheet(
 		primaryEntryOrdersCount: primaryEntryOrdersCount,
 		coverExecutedEntryPrice: coverExecutedEntryPrice,
 		coverEntryOrdersCount: coverEntryOrdersCount,
+		entrySynthFut,
+		entryPrimaryIv,
+		entryCoverIv
 	}
 
 	const crudRes = await crudOperation(
@@ -101,7 +105,14 @@ export async function logEntryOrderToDB(trade: ActiveTradeData): Promise<any> {
 	}
 }
 
-
+export async function logPnlToDB(tradeData: any): Promise<any> {
+	try {
+		const crudRes = await crudOperation(ENV.liveBotDbUrl, ENV.pnlLogsSheetName, { actionType: "create", data: tradeData as any });
+		return crudRes;
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+	}
+}
 
 export async function logActiveOrdersPnl() {
 	try {
@@ -117,6 +128,7 @@ export async function logActiveOrdersPnl() {
 			return;
 		}
 
+		const ordersPnlDataArr = [];
 		for (const orderTag in orderTracker) {
 			const order = orderTracker[orderTag];
 			// console.dir(order, { depth: null });
@@ -175,8 +187,22 @@ export async function logActiveOrdersPnl() {
 					}
 				}
 
-				calculateTheoreticalTheta(orderTag);
+				const nextTheoreticalTheta = calculateTheoreticalTheta(orderTag);
+
+				const pnlObj = {
+					orderTag,
+					theoreticalThetaPnl: nextTheoreticalTheta,
+					postChargesPnl: posPnl,
+					gap,
+					hwm
+				}
+
+				ordersPnlDataArr.push([pnlObj]);
 			}
+		}
+
+		if (ordersPnlDataArr.length > 0) {
+			logPnlToDB(ordersPnlDataArr);
 		}
 	}
 	catch (error) {

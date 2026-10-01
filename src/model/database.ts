@@ -4,6 +4,7 @@ import {
     IndexConfig, RawIndexConfigRow
 } from "../types/sheets";
 import { crudOperation } from "../utils/crud";
+import { placeOrderData } from "../types/logger";
 
 export class Database {
     private readonly url: string;
@@ -130,6 +131,25 @@ export class Database {
                 };
             })
             .filter(accountObj => accountObj.account !== "");
+    }
+
+    public readOrderLogs = async (): Promise<placeOrderData[]> => {
+        try {
+            const sheetData = await crudOperation(
+                this.url,
+                this.sheetName,
+                {
+                    actionType: "read",
+                    extraParams: {
+                        filters: [{ filterType: "none" }]
+                    }
+                }
+            );
+            return sheetData as placeOrderData[];
+        } catch (error) {
+            console.error(`[Order Logs] Failed to fetch sheet "${this.sheetName}"`, error);
+            throw new Error(`Order Logs read failed for "${this.sheetName}": ${(error as Error).message}`);
+        }
     }
 
 }

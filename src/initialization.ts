@@ -1,6 +1,7 @@
 import {
 	instrumentsSheet, kiteSheet, apiAccessTokenSheet,
 	globalStates, masterSpreadsheetConfigSheet,
+	orderLogsSheet, orderTracker,
 	marketStore, ENV
 } from "./config";
 
@@ -8,6 +9,7 @@ import { runDecisionEngine } from "./index";
 import { createLogFilesOnLoggerVM } from "./logger";
 import { updateInstrumentPrices } from "./services/instrumentPricesUpdator"
 import { notificationHandler } from "./utils/notificationsHandler";
+import { TradeManager } from "./model/tradesManager";
 
 
 
@@ -16,11 +18,12 @@ export async function initializeTheBot(midCrash: boolean = false) {
 
 		createLogFilesOnLoggerVM();
 
-		const [instrumentesSheetData, kiteSheetData, apiAccessTokenSheetData, masterSpreadsheetConfigSheetData] = await Promise.all([
+		const [instrumentesSheetData, kiteSheetData, apiAccessTokenSheetData, masterSpreadsheetConfigSheetData, orderLogsData] = await Promise.all([
 			instrumentsSheet.readInstrumentsMasterSheet(),
 			kiteSheet.readKiteToken(),
 			apiAccessTokenSheet.readApiAccessTokens(),
-			masterSpreadsheetConfigSheet.readIndexConfig()
+			masterSpreadsheetConfigSheet.readIndexConfig(),
+			orderLogsSheet.readOrderLogs()
 		]);
 
 
@@ -52,9 +55,19 @@ export async function initializeTheBot(midCrash: boolean = false) {
 			instrumentesSheetData
 		);
 
-		console.log("Bot initialized successfully");
+		// if (!orderLogsData.length) {
+		// 	console.log("orderLogsData is empty");
+		// }
+		// else if (orderLogsData.length > 0) {
+		// 	orderLogsData.forEach(orderRow => {
+		// 		const { orderTag, active } = orderRow;
+		// 		const newOrder = new TradeManager();
+		// 		newOrder.loadTradeFromDb(orderRow);
+		// 		orderTracker[orderTag] = newOrder;
+		// 	});
+		// }
 
-		// runDecisionEngine(); // - this is for testing
+		console.log("Bot initialized successfully");
 	}
 	catch (error) {
 		console.error("[ERROR] Failed to initialize the bot", error);
